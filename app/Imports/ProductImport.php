@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use App\Transaction;
 use App\BusinessLocation;
 use App\Contact;
+use App\ProductVariation;
 use App\Utils\ProductUtil;
 use App\VariationValueTemplate;
 use App\VariationGroupPrice;
@@ -24,9 +25,19 @@ class ProductImport implements ToCollection, WithStartRow
 {
     private $barcode_types;
     private $productUtil;
+    public $processedRows = 0;
 
     public function collection(Collection $rows)
     {
+
+        if ($rows->isEmpty()) {
+            throw new \Exception(
+                'El archivo fue leído, pero no contiene productos desde la fila 2.'
+            );
+        }
+
+
+
         $this->productUtil = new ProductUtil();
         $this->barcode_types = $this->productUtil->barcode_types();
         //$countFirstRow = count($rows->first());
@@ -75,8 +86,8 @@ class ProductImport implements ToCollection, WithStartRow
             $card_group = trim($value[30]);
             if (!empty($card_group)) {
                 $selling_price_group = SellingPriceGroup::where('business_id', $business_id)
-                ->where('name', 'like', '%'.$card_group.'%')
-                ->first();
+                    ->where('name', 'like', '%' . $card_group . '%')
+                    ->first();
                 $product_array['card_group'] = (!empty($selling_price_group)) ? $selling_price_group->id : '';
             } else {
                 $product_array['card_group'] = '';
@@ -93,8 +104,8 @@ class ProductImport implements ToCollection, WithStartRow
             $transfer_group = trim($value[32]);
             if (!empty($transfer_group)) {
                 $selling_price_group = SellingPriceGroup::where('business_id', $business_id)
-                ->where('name', 'like', '%'.$transfer_group.'%')
-                ->first();
+                    ->where('name', 'like', '%' . $transfer_group . '%')
+                    ->first();
                 $product_array['transfer_group'] = (!empty($selling_price_group)) ? $selling_price_group->id : '';
             } else {
                 $product_array['transfer_group'] = '';
@@ -131,7 +142,7 @@ class ProductImport implements ToCollection, WithStartRow
 
             //Add enable stock
             $enable_stock = trim($value[7]);
-            if (in_array($enable_stock, [0,1])) {
+            if (in_array($enable_stock, [0, 1])) {
                 $product_array['enable_stock'] = $enable_stock;
             } else {
                 $is_valid =  false;
@@ -141,7 +152,7 @@ class ProductImport implements ToCollection, WithStartRow
 
             //Add product type
             $product_type = strtolower(trim($value[13]));
-            if (in_array($product_type, ['single','variable'])) {
+            if (in_array($product_type, ['single', 'variable'])) {
                 $product_array['type'] = $product_type;
             } else {
                 $is_valid =  false;
@@ -153,10 +164,10 @@ class ProductImport implements ToCollection, WithStartRow
             $unit_name = trim($value[2]);
             if (!empty($unit_name)) {
                 $unit = Unit::where('business_id', $business_id)
-                            ->where(function ($query) use ($unit_name) {
-                                $query->where('short_name', $unit_name)
-                                      ->orWhere('actual_name', $unit_name);
-                            })->first();
+                    ->where(function ($query) use ($unit_name) {
+                        $query->where('short_name', $unit_name)
+                            ->orWhere('actual_name', $unit_name);
+                    })->first();
                 if (!empty($unit)) {
                     $product_array['unit_id'] = $unit->id;
                 } else {
@@ -187,8 +198,8 @@ class ProductImport implements ToCollection, WithStartRow
             $tax_amount = 0;
             if (!empty($tax_name)) {
                 $tax = TaxRate::where('business_id', $business_id)
-                                ->where('name', $tax_name)
-                                ->first();
+                    ->where('name', $tax_name)
+                    ->first();
                 if (!empty($tax)) {
                     $product_array['tax'] = $tax->id;
                     $tax_amount = $tax->amount;
@@ -211,8 +222,8 @@ class ProductImport implements ToCollection, WithStartRow
 
             //Add alert quantity
             $product_array['alert_quantity'] = ($product_array['enable_stock'] == 1) ?
-            trim($value[8]) : 0;
-           
+                trim($value[8]) : 0;
+
 
             //Add brand
             //Check if brand exists else create new
@@ -252,8 +263,8 @@ class ProductImport implements ToCollection, WithStartRow
                 $product_array['sku'] = $sku;
                 //Check if product with same SKU already exist
                 $is_exist = Product::where('sku', $product_array['sku'])
-                                ->where('business_id', $business_id)
-                                ->exists();
+                    ->where('business_id', $business_id)
+                    ->exists();
                 if ($is_exist) {
                     $skuExist = true;
                 } else {
@@ -280,7 +291,7 @@ class ProductImport implements ToCollection, WithStartRow
 
             //Enable IMEI or Serial Number
             $enable_sr_no = trim($value[23]);
-            if (in_array($enable_sr_no, [0,1])) {
+            if (in_array($enable_sr_no, [0, 1])) {
                 $product_array['enable_sr_no'] = $enable_sr_no;
             } elseif (empty($enable_sr_no)) {
                 $product_array['enable_sr_no'] = 0;
@@ -297,7 +308,7 @@ class ProductImport implements ToCollection, WithStartRow
                 $product_array['weight'] = '';
             }
 
-          
+
 
             if ($product_array['type'] == 'single') {
                 //Calculate profit margin
@@ -322,7 +333,7 @@ class ProductImport implements ToCollection, WithStartRow
                 }
 
                 //Calculate Selling price
-                $selling_price = !empty(trim($value[19])) ? trim($value[19]) : 0 ;
+                $selling_price = !empty(trim($value[19])) ? trim($value[19]) : 0;
 
                 //Calculate product prices
                 $product_prices = $this->calculateVariationPrices(
@@ -347,8 +358,8 @@ class ProductImport implements ToCollection, WithStartRow
                     if (!empty(trim($value[21]))) {
                         $location_name = trim($value[21]);
                         $location = BusinessLocation::where('name', $location_name)
-                                                    ->where('business_id', $business_id)
-                                                    ->first();
+                            ->where('business_id', $business_id)
+                            ->first();
                         if (!empty($location)) {
                             $product_array['opening_stock_details']['location_id'] = $location->id;
                         } else {
@@ -432,7 +443,7 @@ class ProductImport implements ToCollection, WithStartRow
                     $selling_price = array_map('trim', explode(
                         '|',
                         $selling_price_string
-                        ));
+                    ));
                 } else {
                     foreach ($variation_values as $k => $v) {
                         $selling_price[$k] = 0;
@@ -445,7 +456,7 @@ class ProductImport implements ToCollection, WithStartRow
                     $profit_margin = array_map('trim', explode(
                         '|',
                         $profit_margin_string
-                        ));
+                    ));
                 } else {
                     foreach ($variation_values as $k => $v) {
                         $profit_margin[$k] = $default_profit_percent;
@@ -477,8 +488,8 @@ class ProductImport implements ToCollection, WithStartRow
 
                     if (empty($variation_value)) {
                         $variation_value = VariationValueTemplate::create([
-                          'name' => $v,
-                          'variation_template_id' => $variation->id
+                            'name' => $v,
+                            'variation_template_id' => $variation->id
                         ]);
                     }
 
@@ -510,8 +521,8 @@ class ProductImport implements ToCollection, WithStartRow
                     if (!empty(trim($value[21]))) {
                         $location_name = trim($value[21]);
                         $location = BusinessLocation::where('name', $location_name)
-                                                    ->where('business_id', $business_id)
-                                                    ->first();
+                            ->where('business_id', $business_id)
+                            ->first();
                         if (empty($location)) {
                             $is_valid = false;
                             $error_msg = "No location with name '$location_name' found in row no. $row_no";
@@ -536,6 +547,7 @@ class ProductImport implements ToCollection, WithStartRow
             }
             //Assign to formated array
             $formated_data[] = $product_array;
+            $this->processedRows++;
         }
 
         if (!$is_valid) {
@@ -572,89 +584,93 @@ class ProductImport implements ToCollection, WithStartRow
                 unset($product_data['card_group_price']);
                 unset($product_data['transfer_group']);
                 unset($product_data['transfer_group_price']);
-              
-                if($skuExist) {
+
+                $haveStock = true;
+
+                if ($skuExist) {
                     $product = Product::where('sku', $product_data['sku'])->first();
                     $product->update($product_data);
+                    $haveStock = false;
                 } else {
-                                    
+
                     //Create new product
                     $product = Product::create($product_data);
-              
 
 
-                //If auto generate sku generate new sku
+
+                    //If auto generate sku generate new sku
                     if ($product->sku == ' ') {
                         $sku = $this->productUtil->generateProductSku($product->id);
                         $product->sku = $sku;
                         $product->save();
                     }
-    
-                    //Rack, Row & Position.
-                    $this->rackDetails(
-                        $imported_data[$index][25],
-                        $imported_data[$index][26],
-                        $imported_data[$index][27],
-                        $business_id,
-                        $product->id,
-                        $index+1
+                }
+
+                //Rack, Row & Position.
+                $this->rackDetails(
+                    $imported_data[$index][25],
+                    $imported_data[$index][26],
+                    $imported_data[$index][27],
+                    $business_id,
+                    $product->id,
+                    $index + 1
+                );
+
+
+                ProductVariation::where('product_id', $product->id)->delete();
+                Variation::where('product_id', $product->id)->forceDelete();
+
+                //Create single product variation
+                if ($product->type == 'single') {
+                    $this->productUtil->createSingleProductVariation(
+                        $product,
+                        $product->sku,
+                        $variation_data['dpp_exc_tax'],
+                        $variation_data['dpp_inc_tax'],
+                        $variation_data['profit_percent'],
+                        $variation_data['dsp_exc_tax'],
+                        $variation_data['dsp_inc_tax'],
+                        0,
+                        0
                     );
-    
+                    if (!empty($opening_stock) && $haveStock) {
+                        $this->addOpeningStock($opening_stock, $product, $business_id);
+                    }
+                } elseif ($product->type == 'variable') {
+                    //Create variable product variations
+                    $this->productUtil->createVariableProductVariations(
+                        $product,
+                        [$variation_data],
+                        $business_id
+                    );
 
+                    if (!empty($value[20]) && $enable_stock == 1 && $haveStock) {
+                        $this->addOpeningStockForVariable($variation_data, $product, $business_id);
+                    }
+                }
 
-    
-                    //Create single product variation
-                    if ($product->type == 'single') {
-                        $this->productUtil->createSingleProductVariation(
-                            $product,
-                            $product->sku,
-                            $variation_data['dpp_exc_tax'],
-                            $variation_data['dpp_inc_tax'],
-                            $variation_data['profit_percent'],
-                            $variation_data['dsp_exc_tax'],
-                            $variation_data['dsp_inc_tax'],
-                            0,
-                            0
-                        );
-                        if (!empty($opening_stock)) {
-                            $this->addOpeningStock($opening_stock, $product, $business_id);
-                        }
-    
-    
-                    } elseif ($product->type == 'variable') {
-                        //Create variable product variations
-                        $this->productUtil->createVariableProductVariations(
-                            $product,
-                            [$variation_data],
-                            $business_id
-                        );
-    
-                        if (!empty($value[20]) && $enable_stock == 1) {
-                            $this->addOpeningStockForVariable($variation_data, $product, $business_id);
-                        }
-                    }
-    
-                    // create variation group price
-                    if (isset($variation_card_group) && isset($variation_card_price)) {
-                        $var = Variation::where('product_id', $product->id)->first();
-                        VariationGroupPrice::create([
-                            'variation_id' => $var->id,
-                            // La columna ´product_id´ no existe en la DB de produccion, pero si en la de desarrollo.
-                            'product_id' => $product->id,
-                            'price_group_id' => $variation_card_group,
-                            'price_inc_tax' => $variation_card_price,
-                        ]);
-                    }
-    
-                    if (isset($variation_transfer_group) && isset($variation_transfer_price)) {
-                        $var = Variation::where('product_id', $product->id)->first();
-                        VariationGroupPrice::create([
-                            'variation_id' => $var->id,
-                            'product_id' => $product->id,
-                            'price_group_id' => $variation_transfer_group,
-                            'price_inc_tax' => $variation_transfer_price,
-                        ]);
-                    }
+                // create variation group price
+                if (isset($variation_card_group) && isset($variation_card_price)) {
+                    $var = Variation::where('product_id', $product->id)->first();
+                    VariationGroupPrice::where('variation_id', $var->id)->where('product_id', $product->id)->delete();
+                    VariationGroupPrice::create([
+                        'variation_id' => $var->id,
+                        // La columna ´product_id´ no existe en la DB de produccion, pero si en la de desarrollo.
+                        'product_id' => $product->id,
+                        'price_group_id' => $variation_card_group,
+                        'price_inc_tax' => $variation_card_price,
+                    ]);
+                }
+
+                if (isset($variation_transfer_group) && isset($variation_transfer_price)) {
+                    $var = Variation::where('product_id', $product->id)->first();
+                    VariationGroupPrice::where('variation_id', $var->id)->where('product_id', $product->id)->delete();
+                    VariationGroupPrice::create([
+                        'variation_id' => $var->id,
+                        'product_id' => $product->id,
+                        'price_group_id' => $variation_transfer_group,
+                        'price_inc_tax' => $variation_transfer_price,
+                    ]);
                 }
             }
         }
@@ -771,17 +787,17 @@ class ProductImport implements ToCollection, WithStartRow
         //Add opening stock transaction
         $transaction = Transaction::create(
             [
-                                'type' => 'opening_stock',
-                                'opening_stock_product_id' => $product->id,
-                                'status' => 'received',
-                                'business_id' => $business_id,
-                                'transaction_date' => $transaction_date,
-                                'total_before_tax' => $total_before_tax,
-                                'location_id' => $opening_stock['location_id'],
-                                'final_total' => $total_before_tax,
-                                'payment_status' => 'paid',
-                                'created_by' => $user_id
-                            ]
+                'type' => 'opening_stock',
+                'opening_stock_product_id' => $product->id,
+                'status' => 'received',
+                'business_id' => $business_id,
+                'transaction_date' => $transaction_date,
+                'total_before_tax' => $total_before_tax,
+                'location_id' => $opening_stock['location_id'],
+                'final_total' => $total_before_tax,
+                'payment_status' => 'paid',
+                'created_by' => $user_id
+            ]
         );
         //Get product tax
         $tax_percent = !empty($product->product_tax->amount) ? $product->product_tax->amount : 0;
@@ -791,16 +807,16 @@ class ProductImport implements ToCollection, WithStartRow
 
         //Create purchase line
         $transaction->purchase_lines()->create([
-                        'product_id' => $product->id,
-                        'variation_id' => $variation->id,
-                        'quantity' => $opening_stock['quantity'],
-                        'item_tax' => $item_tax,
-                        'tax_id' => $tax_id,
-                        'pp_without_discount' => $variation->default_purchase_price,
-                        'purchase_price' => $variation->default_purchase_price,
-                        'purchase_price_inc_tax' => $variation->dpp_inc_tax,
-                        'exp_date' => !empty($opening_stock['exp_date']) ? $opening_stock['exp_date'] : null
-                    ]);
+            'product_id' => $product->id,
+            'variation_id' => $variation->id,
+            'quantity' => $opening_stock['quantity'],
+            'item_tax' => $item_tax,
+            'tax_id' => $tax_id,
+            'pp_without_discount' => $variation->default_purchase_price,
+            'purchase_price' => $variation->default_purchase_price,
+            'purchase_price_inc_tax' => $variation->dpp_inc_tax,
+            'exp_date' => !empty($opening_stock['exp_date']) ? $opening_stock['exp_date'] : null
+        ]);
         //Update variation location details
         $this->productUtil->updateProductQuantity($opening_stock['location_id'], $product->id, $variation->id, $opening_stock['quantity']);
     }
@@ -819,24 +835,24 @@ class ProductImport implements ToCollection, WithStartRow
             //Add opening stock transaction
             $transaction = Transaction::create(
                 [
-                                'type' => 'opening_stock',
-                                'opening_stock_product_id' => $product->id,
-                                'status' => 'received',
-                                'business_id' => $business_id,
-                                'transaction_date' => $transaction_date,
-                                'total_before_tax' => $total_before_tax,
-                                'location_id' => $location_id,
-                                'final_total' => $total_before_tax,
-                                'payment_status' => 'paid',
-                                'created_by' => $user_id
-                            ]
+                    'type' => 'opening_stock',
+                    'opening_stock_product_id' => $product->id,
+                    'status' => 'received',
+                    'business_id' => $business_id,
+                    'transaction_date' => $transaction_date,
+                    'total_before_tax' => $total_before_tax,
+                    'location_id' => $location_id,
+                    'final_total' => $total_before_tax,
+                    'payment_status' => 'paid',
+                    'created_by' => $user_id
+                ]
             );
 
             foreach ($variations['variations'] as $variation_os) {
                 if (!empty($variation_os['opening_stock'])) {
                     $variation = Variation::where('product_id', $product->id)
-                                    ->where('name', $variation_os['value'])
-                                    ->first();
+                        ->where('name', $variation_os['value'])
+                        ->first();
                     if (!empty($variation)) {
                         $opening_stock = [
                             'quantity' => $variation_os['opening_stock'],
@@ -854,15 +870,15 @@ class ProductImport implements ToCollection, WithStartRow
 
                     //Create purchase line
                     $transaction->purchase_lines()->create([
-                                    'product_id' => $product->id,
-                                    'variation_id' => $variation->id,
-                                    'quantity' => $opening_stock['quantity'],
-                                    'item_tax' => $item_tax,
-                                    'tax_id' => $tax_id,
-                                    'purchase_price' => $variation->default_purchase_price,
-                                    'purchase_price_inc_tax' => $variation->dpp_inc_tax,
-                                    'exp_date' => !empty($opening_stock['exp_date']) ? $opening_stock['exp_date'] : null
-                                ]);
+                        'product_id' => $product->id,
+                        'variation_id' => $variation->id,
+                        'quantity' => $opening_stock['quantity'],
+                        'item_tax' => $item_tax,
+                        'tax_id' => $tax_id,
+                        'purchase_price' => $variation->default_purchase_price,
+                        'purchase_price_inc_tax' => $variation->dpp_inc_tax,
+                        'exp_date' => !empty($opening_stock['exp_date']) ? $opening_stock['exp_date'] : null
+                    ]);
                     //Update variation location details
                     $this->productUtil->updateProductQuantity($location_id, $product->id, $variation->id, $opening_stock['quantity']);
                 }
@@ -880,7 +896,7 @@ class ProductImport implements ToCollection, WithStartRow
             ->where('contact_id', $supplierCode)
             ->whereIn('contacts.type', ['supplier', 'both'])
             ->first();
-        if(isset($supplier)) {
+        if (isset($supplier)) {
             $product->suppliers()->attach($supplier->id, [
                 'list_price' => $listPrice,
                 'final_price' => $finalPrice,

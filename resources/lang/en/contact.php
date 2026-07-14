@@ -40,4 +40,8 @@ return [
     'total_sale_paid' => 'Total Sale Payment',
     'total_sale_due' => 'Total Sale Due',
     'customer' => 'Customer',
+    'bank' => 'Bank',
+    'cbu' => 'CBU',
+    'bank_account_number' => 'Bank account number',
+    'alias' => 'Alias'
 ];

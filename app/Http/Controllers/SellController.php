@@ -52,7 +52,7 @@ class SellController extends Controller
         $this->productUtil = $productUtil;
 
         $this->dummyPaymentLine = [
-            'method' => 'cash', 'amount' => 0, 'note' => '', 'card_transaction_number' => '', 'card_number' => '', 'card_type' => '', 'card_holder_name' => '', 'card_month' => '', 'card_year' => '', 'card_security' => '', 'cheque_number' => '', 'bank_account_number' => '',
+            'method' => 'cash', 'amount' => 0, 'note' => '', 'card_transaction_number' => '', 'card_number' => '', 'card_type' => '', 'card_holder_name' => '', 'card_month' => '', 'card_year' => '', 'card_security' => '', 'cheque_number' => '', 'cheque_bank' => '', 'cheque_type' => '', 'cheque_issue_date' => '', 'cheque_deferral_date' => '', 'cheque_amount' => '', 'bank_account_number' => '',
             'is_return' => 0, 'transaction_no' => ''
         ];
     }
@@ -193,9 +193,8 @@ class SellController extends Controller
                 $sells->whereDate('transactions.transaction_date', '>=', $start)
                     ->whereDate('transactions.transaction_date', '<=', $end);
             } else {
-                // limit transactions to the most recent 12 months for performance reasons
-                $oneYearAgo = Carbon::now()->subYear();
-                $sells->whereDate('transactions.created_at', '>=', $oneYearAgo);
+                // limit transactions to the most recent 2 months
+                $sells->whereDate('transactions.transaction_date', '>=', Carbon::now()->subMonths(2));
             }
 
             //Check is_direct sell
@@ -360,6 +359,7 @@ class SellController extends Controller
                     }
                 )
                 ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
+                //en TransactionPaymentController@show se encuentra la visualizacion de la factura
                 ->editColumn(
                     'payment_status',
                     '<a href="{{ action("TransactionPaymentController@show", [$id])}}" class="view_payment_modal payment-status-label no-print" data-orig-value="{{$payment_status}}" data-status-name="{{__(\'lang_v1.\' . $payment_status)}}"><span class="label @payment_status($payment_status)">{{__(\'lang_v1.\' . $payment_status)}}
@@ -390,7 +390,7 @@ class SellController extends Controller
                 ->editColumn('invoice_no', function ($row) {
                     $invoice_no = $row->invoice_no;
                     if (!empty($row->woocommerce_order_id)) {
-                        $invoice_no .= ' <i class="fa fa-wordpress text-primary no-print" title="' . __('lang_v1.synced_from_woocommerce') . '"></i>';
+                        $invoice_no .= ' <i class="fa fa-wordpress text-primary no-print" title="' . __('lang_v1.synced_from_woocommerce') . '."></i>';
                     }
                     if (!empty($row->return_exists)) {
                         $invoice_no .= ' &nbsp;<small class="label bg-red label-round no-print" title="' . __('lang_v1.some_qty_returned_from_sell') . '"><i class="fa fa-undo"></i></small>';
@@ -497,8 +497,10 @@ class SellController extends Controller
 
         $default_datetime = $this->businessUtil->format_date('now', true);
 
-        $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
-
+        $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings,true);
+        if(empty($pos_settings["carries_a_bag"])){
+            $pos_settings["carries_a_bag"]=0;   
+        }
         return view('sell.create')
             ->with(compact(
                 'business_details',
@@ -571,10 +573,10 @@ class SellController extends Controller
                 $order_taxes[$sell->tax->name] = $sell->tax_amount;
             }
         }
-
+        $sell_lines = $sell->sell_lines();
         $business_details = $this->businessUtil->getDetails($business_id);
         $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
-
+        $pos_settings["carries_a_bag"] = $sell->carries_a_bag;
         return view('sale_pos.show')
             ->with(compact('taxes', 'sell', 'payment_types', 'order_taxes', 'pos_settings'));
     }
@@ -1234,9 +1236,36 @@ class SellController extends Controller
         $sell->afip_invoice_date = $date2;
         $sell->exp_cae = $vtocae;
         $num_fac = $last_voucher + 1;
+
+        // Formatear el número de factura de AFIP
         $sell->num_invoice_afip = str_pad($punto_venta, 4, "0", STR_PAD_LEFT) . '-' . str_pad($num_fac, 8, "0", STR_PAD_LEFT);
-        $data = '{"ver":1,"fecha":' . $dateqr . ',"cuit":' . $cuit . ',"ptoVta":' . $punto_venta . ',"tipoCmp":11,"nroCmp":' . $num_fac . ',"importe":' . $ImpTotal . ',"moneda":"PES","ctz":1,"tipoDocRec":' . $doctipo . ',"nroDocRec":' . $sell->contact->tax_number . ',"tipoCodAut":"E","codAut":' . $cae . '}';
-        $data64 = "https://www.afip.gob.ar/fe/qr/?p=" . base64_encode($data);
+
+       
+        // Preparar los datos para el QR
+        $data = [
+            'ver' => 1,  // Versión del formato QR
+            'fecha' => $dateqr,  // Fecha de emisión de la factura
+            'cuit' => (int)$cuit,  // CUIT del emisor
+            'ptoVta' => (int)$punto_venta,  // Punto de venta
+            'tipoCmp' => (int)$CbteTipo,  // Tipo de comprobante (Factura, Nota de Crédito, etc.)
+            'nroCmp' => (int)$num_fac,  // Número de comprobante
+            'importe' => (float)$ImpTotal,  // Importe total
+            'moneda' => 'PES',  // Moneda (Pesos)
+            'ctz' => 1,  // Cotización (normalmente es 1 para pesos)
+            'tipoDocRec' => (int)$doctipo,  // Tipo de documento del receptor (DNI, CUIT, etc.)
+            'nroDocRec' => (int)$sell->contact->tax_number,  // Número de documento del receptor (si es numérico)
+            'tipoCodAut' => 'E',  // Tipo de código de autorización ('E' para CAE)
+            'codAut' => (int)$cae  // CAE (Código de Autorización Electrónico)
+        ];
+
+
+        // Convertir el array a JSON
+        $dataJson = json_encode($data);
+
+        // Codificar en base64
+        $data64 = "https://www.afip.gob.ar/fe/qr/?p=" . base64_encode($dataJson);
+
+        // Asignar el código QR a la factura
         $sell->qrCode = $data64;
         $sell->type_invoice = $letra;
 

@@ -55,6 +55,8 @@
 	</div>
 	{!! Form::hidden("payment[$row_index][method_card]", '', ['class' => 'form-control ', 'required', 'id' => "method_card_$row_index", 'style']); !!}
 	{!! Form::hidden("payment[$row_index][method_card]", '', ['class' => 'form-control ', 'required', 'id' => "method_card_$row_index", 'style']); !!}
+	{!! Form::hidden("payment[$row_index][method_cheque]", '', ['class' => 'form-control ', 'required', 'id' => "method_cheque_$row_index", 'style']); !!}
+	{!! Form::hidden("payment[$row_index][method_cheque]", '', ['class' => 'form-control ', 'required', 'id' => "method_cheque_$row_index", 'style']); !!}
 </div>
 
 

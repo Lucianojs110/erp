@@ -301,10 +301,13 @@
               </span>
               {!! Form::text('landmark', $contact->landmark, ['class' => 'form-control', 'placeholder' => __('business.landmark')]); !!}
             </div>
+          
           </div>
+          
         </div>
-        <div class="clearfix"></div>
+      
         <div class="col-md-12">
+          
           <hr />
         </div>
         <div class="col-md-3">

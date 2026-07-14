@@ -159,7 +159,8 @@
         auth()->user()->can('category.view') ||
         auth()->user()->can('brand.create') ||
         auth()->user()->can('unit.create') ||
-        auth()->user()->can('category.create') )
+        auth()->user()->can('category.create') ||
+        auth()->user()->can('cheque_report.view') )
           <li class="treeview {{ in_array($request->segment(1), ['variation-templates', 'products', 'labels', 'import-products', 'import-opening-stock', 'selling-price-group', 'brands', 'units', 'categories']) ? 'active active-sub' : '' }}" id="tour_step5">
             <a href="#" id="tour_step5_menu"><i class="fa fa-cubes"></i> <span>@lang('sale.products')</span>
               <span class="pull-right-container">
@@ -289,9 +290,14 @@
             </li>
            
           </ul>
+          <ul class="treeview-menu">
+            <li class="{{ $request->segment(1) == 'expenses' && empty($request->segment(2)) ? 'active' : '' }}">
+              <a href="{{action('ReportController@getChequeReport')}}"><i class="fa fa-money"></i>Cheques</a>
+            </li>
+           
+          </ul>
         </li>
         @endif
-
         
         @if(auth()->user()->can('stock_transfers.view') )
         <li class="treeview {{ $request->segment(1) == 'stock-transfers' ? 'active active-sub' : '' }}">
@@ -375,6 +381,7 @@
           || auth()->user()->can('trending_product_report.view') 
           || auth()->user()->can('sales_representative.view') 
           || auth()->user()->can('expense_report.view')
+          || auth()->user()->can('cheque_report.view')
           )
 
           <li class="treeview {{  in_array( $request->segment(1), ['reports']) ? 'active active-sub' : '' }}" id="tour_step8">
@@ -445,6 +452,10 @@
               -->
               @can('register_report.view')
                 <li class="{{ $request->segment(2) == 'register-report' ? 'active' : '' }}" ><a href="{{action('ReportController@getRegisterReport')}}"><i class="fa fa-briefcase"></i>@lang('report.register_report')</a></li>
+              @endcan
+
+              @can('cheque_report.view')
+                <li class="{{ $request->segment(2) == 'cheque-report' ? 'active' : '' }}" ><a href="{{action('ReportController@getChequeReport')}}"><i class="fa fa-briefcase"></i>@lang('report.cheque_report')</a></li>
               @endcan
 
               @can('sales_representative.view')

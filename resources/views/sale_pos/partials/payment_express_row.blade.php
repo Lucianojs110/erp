@@ -33,6 +33,7 @@
                     </div>
 					{!! Form::hidden("payment[0][method_cash]", '', ['class' => 'form-control ',  'id' => "method_cash_0", 'style']); !!}
 					{!! Form::hidden("payment[0][method_card]", '', ['class' => 'form-control ', 'required', 'id' => "method_card_0", 'style']); !!}
+					{!! Form::hidden("payment[0][method_cheque]", '', ['class' => 'form-control ', 'required', 'id' => "method_cheque_0", 'style']); !!}
 				<div class="clearfix"></div>
 			</div>
 		</div>

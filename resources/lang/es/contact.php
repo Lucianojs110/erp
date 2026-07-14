@@ -22,6 +22,7 @@
 "contact_info" => "Datos de :contacts",
 "all_purchases_linked_to_this_contact" => "Todas las compras relacionadas con este contacto",
 "all_sells_linked_to_this_contact" => "Todas las ventas relacionadas con este contacto",
+"all_cheques_linked_to_this_contact" => "Todos los cheques relacionadas con este contacto",
 "total_purchase_due" => "Total compra debida", /* modified */
 "pay_due_amount" => "Cantidad adeudada",
 "total_paid" => "Total pagado",
@@ -29,4 +30,9 @@
 "total_sale_paid" => "Pago de venta total",
 "total_sale_due" => "Venta total debida", /* modified */
 "customer" => "Cliente",
+'bank' => 'Banco',
+'cbu' => 'CBU',
+'bank_account_number' => 'Número de cuenta',
+'alias' => 'Alias'
+
 ];

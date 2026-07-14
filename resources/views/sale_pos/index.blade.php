@@ -85,7 +85,10 @@ $(document).ready( function(){
     //Date range as a button
     //Date range as a button
     $('#sell_list_filter_date_range').daterangepicker(
-        dateRangeSettings,
+        $.extend({}, dateRangeSettings, {
+            startDate: moment().subtract(6, 'days'),
+            endDate: moment()
+        }),
         function (start, end) {
             $('#sell_list_filter_date_range').val(start.format(moment_date_format) + ' ~ ' + end.format(moment_date_format));
             sell_table.ajax.reload();
@@ -99,6 +102,7 @@ $(document).ready( function(){
     sell_table = $('#sell_table').DataTable({
         processing: true,
         serverSide: true,
+        deferRender: true,
         aaSorting: [[0, 'desc']],
         "ajax": {
             "url": "/sells",

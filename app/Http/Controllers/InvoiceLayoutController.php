@@ -68,7 +68,7 @@ class InvoiceLayoutController extends Controller
             ]);
 
             $input = $request->only(['name', 'header_text',
-                'invoice_no_prefix', 'invoice_heading', 'sub_total_label', 'discount_label', 'tax_label', 'total_label', 'highlight_color', 'footer_text', 'invoice_heading_not_paid', 'invoice_heading_paid', 'total_due_label', 'customer_label', 'paid_label', 'sub_heading_line1', 'sub_heading_line2',
+                'invoice_no_prefix', 'invoice_heading', 'sub_total_label', 'discount_label', 'tax_label', 'total_label', 'highlight_color', 'footer_text', 'invoice_heading_not_paid', 'invoice_heading_paid', 'total_due_label', 'iva_label', 'iva_inc', 'customer_label', 'paid_label', 'sub_heading_line1', 'sub_heading_line2',
                     'sub_heading_line3', 'sub_heading_line4', 'sub_heading_line5',
                     'table_product_label', 'table_qty_label', 'table_unit_price_label',
                     'table_subtotal_label', 'client_id_label', 'date_label', 'quotation_heading', 'quotation_no_prefix', 'design', 'client_tax_label', 'cat_code_label', 'cn_heading', 'cn_no_label', 'cn_amount_label', 'sales_person_label', 'prev_bal_label', 'date_time_format']);
@@ -178,7 +178,7 @@ class InvoiceLayoutController extends Controller
             ]);
 
             $input = $request->only(['name', 'header_text',
-                'invoice_no_prefix', 'invoice_heading', 'sub_total_label', 'discount_label', 'tax_label', 'total_label', 'highlight_color', 'footer_text', 'invoice_heading_not_paid', 'invoice_heading_paid', 'total_due_label', 'customer_label', 'paid_label', 'sub_heading_line1', 'sub_heading_line2',
+                'invoice_no_prefix', 'invoice_heading', 'sub_total_label', 'discount_label', 'tax_label', 'total_label', 'highlight_color', 'footer_text', 'invoice_heading_not_paid', 'invoice_heading_paid', 'total_due_label', 'iva_label', 'iva_inc', 'customer_label', 'paid_label', 'sub_heading_line1', 'sub_heading_line2',
                     'sub_heading_line3', 'sub_heading_line4', 'sub_heading_line5',
                     'table_product_label', 'table_qty_label', 'table_unit_price_label',
                     'table_subtotal_label', 'client_id_label', 'date_label', 'quotation_heading', 'quotation_no_prefix', 'design',

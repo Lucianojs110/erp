@@ -115,43 +115,67 @@
 									<button type="button" class="btn btn-warning btn-block btn-flat @if($pos_settings['disable_draft'] != 0) hide @endif" id="pos-draft">@lang('sale.draft')</button>
 									<button type="button" class="btn btn-info btn-block btn-flat" id="pos-quotation">@lang('lang_v1.quotation')</button>
 								</div>
-								@if(auth()->user()->can('sell.payments'))
-								<div class="col-sm-3 col-xs-6 col-2px-padding">
-									<button type="button" class="btn bg-maroon btn-block btn-flat no-print @if(!empty($pos_settings['disable_suspend'])) pos-express-btn btn-lg @endif pos-express-finalize" data-pay_method="card" title="@lang('lang_v1.tooltip_express_checkout_card')">
-										<input type="hidden" name="pay_method" value="card">
-										<div class="text-center">
-											<i class="fa fa-check" aria-hidden="true"></i>
-											<b>@lang('lang_v1.express_checkout_card')</b>
-										</div>
-									</button>
-									@if(empty($pos_settings['disable_suspend']))
-									<button type="button" class="btn bg-red btn-block btn-flat no-print pos-express-finalize" data-pay_method="suspend" title="@lang('lang_v1.tooltip_suspend')">
-										<div class="text-center">
-											<i class="fa fa-pause" aria-hidden="true"></i>
-											<b>@lang('lang_v1.suspend')</b>
-										</div>
-									</button>
-									@endif
+								@if (auth()->user()->can('sell.payments'))
+                                    <div class="col-sm-3 col-xs-6 col-2px-padding">
+                                        <button type="button"
+                                            class="btn bg-maroon btn-block btn-flat no-print @if (!empty($pos_settings['disable_suspend'])) pos-express-btn btn-lg @endif pos-express-finalize"
+                                            data-pay_method="card" title="@lang('lang_v1.tooltip_express_checkout_card')">
+                                            <div class="text-center">
+                                                <i class="fa fa-check" aria-hidden="true"></i>
+                                                <b>@lang('lang_v1.express_checkout_card')</b>
+                                            </div>
+                                        </button>
+                                        @if (empty($pos_settings['disable_suspend']))
+                                            <button type="button" id="pos-suspend"
+                                                class="btn bg-red btn-block btn-flat no-print pos-suspend"
+                                                data-pay_method="suspend" title="@lang('lang_v1.tooltip_suspend')">
+                                                <div class="text-center">
+                                                    <i class="fa fa-check" aria-hidden="true"></i>
+                                                    <b>Cuenta Corriente</b>
+                                                </div>
+                                            </button>
+                                        @endif
 
-								</div>
-								<div class="col-sm-4 col-xs-12 col-2px-padding">
-									<button type="button" class="btn bg-navy  btn-block btn-flat btn-lg no-print @if($pos_settings['disable_pay_checkout'] != 0) hide @endif pos-express-btn" id="pos-finalize" title="@lang('lang_v1.tooltip_checkout_multi_pay')">
-										<div class="text-center">
-											<i class="fa fa-check" aria-hidden="true"></i>
-											<b>@lang('lang_v1.checkout_multi_pay')</b>
-										</div>
-									</button>
-								</div>
-								
-								<div class="col-sm-3 col-xs-12 col-2px-padding">
-									<button type="button" class="btn btn-success btn-block btn-flat btn-lg no-print @if($pos_settings['disable_express_checkout'] != 0) hide @endif pos-express-btn pos-express-finalize" data-pay_method="cash" title="@lang('tooltip.express_checkout')">
-										<div class="text-center">
-											<i class="fa fa-check" aria-hidden="true"></i>
-											<b>@lang('lang_v1.express_checkout_cash')</b>
-										</div>
-									</button>
-								</div>
-								@endif
+                                    </div>
+                                    <div class="col-sm-3 col-xs-6 col-2px-padding">
+                                        <button type="button"
+                                            class="btn bg-purple btn-block btn-flat no-print @if (!empty($pos_settings['disable_suspend'])) pos-express-btn btn-lg @endif pos-express-finalize"
+                                            data-pay_method="cheque" title="@lang('lang_v1.tooltip_cheques')">
+                                            <div class="text-center">
+                                                <i class="fa fa-check" aria-hidden="true"></i>
+                                                <b>@lang('lang_v1.cheque')</b>
+                                            </div>
+                                        </button>
+                                        <button type="button"
+                                            class="btn bg-navy btn-block btn-flat no-print @if ($pos_settings['disable_pay_checkout'] != 0) hide pos-express-btn @endif pago_multiple"
+                                            id="pos-finalize" title="@lang('lang_v1.tooltip_checkout_multi_pay')">
+                                            <div class="text-center">
+                                                <i class="fa fa-check" aria-hidden="true"></i>
+                                                <b>@lang('lang_v1.checkout_multi_pay')</b>
+                                            </div>
+                                        </button>
+                                    </div>
+
+                                    <div class="col-sm-3 col-xs-12 col-2px-padding">
+                                        <button type="button"
+                                            class="btn bg-blue btn-block btn-flat no-print @if ($pos_settings['disable_pay_checkout'] != 0) hide pos-express-btn @endif pos-express-finalize"
+                                            title="@lang('lang_v1.tooltip_mp')">
+                                            <div class="text-center">
+                                                <i class="fa fa-check" aria-hidden="true"></i>
+                                                <b>@lang('lang_v1.mp')</b>
+                                            </div>
+                                        </button>
+                                        <button type="button"
+                                            class="btn btn-success btn-block btn-flat no-print @if ($pos_settings['disable_express_checkout'] != 0) hide @endif pos-express-finalize"
+                                            data-pay_method="cash" title="@lang('tooltip.express_checkout')">
+                                            <div class="text-center">
+                                                <i class="fa fa-check" aria-hidden="true"></i>
+                                                <b>@lang('lang_v1.express_checkout_cash')</b>
+                                            </div>
+                                        </button>
+
+                                    </div>
+                                @endif
 
 								<div class="div-overlay pos-processing"></div>
 							</td>

@@ -247,15 +247,11 @@
 						@if(!empty($line['product_expiry'])), {{$line['product_expiry_label']}}: {{$line['product_expiry']}} @endif
 					</td>
 					<td>{{$line['quantity']}} {{$line['units']}} </td>
-					@if(!$receipt_details->type_invoice OR $receipt_details->type_invoice=='B')
 					<td>{{$line['unit_price_inc_tax']}}</td>
 					<td>{{$line['line_total']}}</td>
-					@else
-
 					<td>{{$line['unit_price_inc_tax']}}</td>
-
 					<td>{{$line['line_total']}}</td>
-					@endif
+
 
 				</tr>
 				@if(!empty($line['modifiers']))

@@ -1,5 +1,6 @@
 <?php
 
+use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Permission\Models\Permission;
@@ -50,6 +51,7 @@ class PermissionsTableSeeder extends Seeder
             ['name' => 'tax_report.view'],
             ['name' => 'trending_product_report.view'],
             ['name' => 'register_report.view'],
+            ['name' => 'cheque_report.view'],
             ['name' => 'sales_representative.view'],
             ['name' => 'expense_report.view'],
 
@@ -83,10 +85,43 @@ class PermissionsTableSeeder extends Seeder
 
             ['name' => 'stock_transfers.view'],
             ['name' => 'stock_transfers.create'],
+
+            ['name' => 'delivery.view'],
+            ['name' => 'delivery.create'],
+            ['name' => 'delivery.edit'],
+            ['name' => 'delivery.delete'],
+
+            ['name' => 'agent.view'],
+            ['name' => 'agent.create'],
+            ['name' => 'agent.edit'],
+            ['name' => 'agent.delete'],
+
+            ['name' => 'return.view'],
+            ['name' => 'return.create'],
+            ['name' => 'return.edit'],
+            ['name' => 'return.delete'],
+
+            ['name' => 'roles.view'],
+            ['name' => 'roles.create'],
+            ['name' => 'roles.update'],
+            ['name' => 'roles.delete'],
+
+            ['name' => 'product.opening_stock'],
+            ['name' => 'view_purchase_price'],
+            ['name' => 'purchase.payments'],
+            ['name' => 'stock_transfers.permitted_locations'],
+            ['name' => 'direct_sell.access'],
+            ['name' => 'sell.payments'],
+            ['name' => 'edit_product_price_from_sale_screen'],
+            ['name' => 'edit_product_discount_from_sale_screen'],
+            ['name' => 'discount.access'],
+            ['name' => 'profit_loss_report.view'],
+            ['name' => 'account.access'],
+            ['name' => 'access_default_selling_price'],
         ];
 
         $insert_data = [];
-        $time_stamp = \Carbon::now()->toDateTimeString();
+        $time_stamp = Carbon::now()->toDateTimeString();
         foreach ($data as $d) {
             $d['guard_name'] = 'web';
             $d['created_at'] = $time_stamp;

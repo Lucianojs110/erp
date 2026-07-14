@@ -93,6 +93,7 @@ class BusinessUtil extends Util
                         'invoice_heading_not_paid' => '',
                         'invoice_heading_paid' => '',
                         'total_due_label' => 'Total Due',
+                        'iva_label' => 'Iva Incluido',
                         'paid_label' => 'Total Paid',
                         'show_payments' => 1,
                         'show_customer' => 1,
@@ -225,23 +226,57 @@ class BusinessUtil extends Util
      */
     public function getDetails($business_id)
     {
-        $details = Business::
-                        leftjoin('tax_rates AS TR', 'business.default_sales_tax', 'TR.id')
-                        ->leftjoin('currencies AS cur', 'business.currency_id', 'cur.id')
-                        ->select(
-                            'business.*',
-                            'cur.code as currency_code',
-                            'cur.symbol as currency_symbol',
-                            'thousand_separator',
-                            'decimal_separator',
-                            'TR.amount AS tax_calculation_amount',
-                            'business.default_sales_discount'
-                        )
-                        ->where('business.id', $business_id)
-                        ->first();
+        $cacheKey = "business_getDetails_{$business_id}";
+        $details = cache()->remember($cacheKey, 54000, function () use ($business_id) {
+            return Business::
+            leftjoin('tax_rates AS TR', 'business.default_sales_tax', 'TR.id')
+            ->leftjoin('currencies AS cur', 'business.currency_id', 'cur.id')
+            ->select(
+                'business.*',
+                'cur.code as currency_code',
+                'cur.symbol as currency_symbol',
+                'thousand_separator',
+                'decimal_separator',
+                'TR.amount AS tax_calculation_amount',
+                'business.default_sales_discount'
+            )
+            ->where('business.id', $business_id)
+            ->first();
+        });
 
         return $details;
     }
+
+
+    /**
+     * Gives details for a business without cache
+     *
+     * @return object
+     */
+    public function getDetailsWithoutCache($business_id)
+    {
+        //This method was added because in sales > pos does not immediately
+        // reflect any changes saved in
+        //the pos settings
+        $details = Business::
+            leftjoin('tax_rates AS TR', 'business.default_sales_tax', 'TR.id')
+            ->leftjoin('currencies AS cur', 'business.currency_id', 'cur.id')
+            ->select(
+                'business.*',
+                'cur.code as currency_code',
+                'cur.symbol as currency_symbol',
+                'thousand_separator',
+                'decimal_separator',
+                'TR.amount AS tax_calculation_amount',
+                'business.default_sales_discount'
+            )
+            ->where('business.id', $business_id)
+            ->first();
+       
+
+        return $details;
+    }
+
 
     /**
      * Gives current financial year
@@ -410,7 +445,7 @@ class BusinessUtil extends Util
      */
     public function defaultPosSettings()
     {
-        return ['disable_pay_checkout' => 0, 'disable_draft' => 0, 'disable_express_checkout' => 0, 'hide_product_suggestion' => 0, 'hide_recent_trans' => 0, 'disable_discount' => 0, 'disable_order_tax' => 0, 'is_pos_subtotal_editable' => 0, 'pagos_monedas' => 0, 'check_afip' => 0, 'modal_cambio' => 0, 'allow_overselling' => 0];
+        return ['disable_pay_checkout' => 0, 'disable_draft' => 0, 'disable_express_checkout' => 0, 'hide_product_suggestion' => 0, 'hide_recent_trans' => 0, 'disable_discount' => 0, 'disable_order_tax' => 0, 'is_pos_subtotal_editable' => 0, 'pagos_monedas' => 0, 'check_afip' => 0, 'modal_cambio' => 0, 'allow_overselling' => 0,'carries_a_bag' => 0];
     }
 
     /**

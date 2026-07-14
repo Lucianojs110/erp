@@ -6,7 +6,7 @@ use DB;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-
+use Illuminate\Support\Collection;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -21,14 +21,15 @@ class User extends Authenticatable
      * @var array
      */
     protected $guarded = ['id'];
-    
+
     /**
      * The attributes that should be hidden for arrays.
      *
      * @var array
      */
     protected $hidden = [
-        'password', 'remember_token',
+        'password',
+        'remember_token',
     ];
 
     /**
@@ -64,14 +65,14 @@ class User extends Authenticatable
     public static function create_user($details)
     {
         $user = User::create([
-                    'surname' => $details['surname'],
-                    'first_name' => $details['first_name'],
-                    'last_name' => $details['last_name'],
-                    'username' => $details['username'],
-                    'email' => $details['email'],
-                    'password' => bcrypt($details['password']),
-                    'language' => !empty($details['language']) ? $details['language'] : 'en'
-                ]);
+            'surname' => $details['surname'],
+            'first_name' => $details['first_name'],
+            'last_name' => $details['last_name'],
+            'username' => $details['username'],
+            'email' => $details['email'],
+            'password' => bcrypt($details['password']),
+            'language' => !empty($details['language']) ? $details['language'] : 'en'
+        ]);
 
         return $user;
     }
@@ -81,23 +82,22 @@ class User extends Authenticatable
      *
      * @return string or array
      */
-    public static function permitted_locations()
+    public function permitted_locations()
     {
-        if (auth()->user()->can('access_all_locations')) {
-            return 'all';
-        } else {
-            $business_id = request()->session()->get('user.business_id');
-            $permitted_locations = [];
-            $all_locations = BusinessLocation::where('business_id', $business_id)->get();
-            foreach ($all_locations as $location) {
-                if (auth()->user()->can('location.' . $location->id)) {
-                    $permitted_locations[] = $location->id;
-                }
-            }
-            
-            return $permitted_locations;
-        }
+        $permitted = $this->getAllPermissions()
+            ->pluck('name')
+            ->filter(function ($perm) {
+                return str_starts_with($perm, 'location.');
+            })
+            ->map(function ($perm) {
+                return (int) str_replace('location.', '', $perm);
+            })
+            ->values()
+            ->all();
+
+        return $this->can('access_all_locations') ? 'all' : $permitted;
     }
+
 
     /**
      * Returns if a user can access the input location
@@ -107,8 +107,14 @@ class User extends Authenticatable
      */
     public static function can_access_this_location($location_id)
     {
-        $permitted_locations = User::permitted_locations();
-        
+        $user = auth()->user();
+
+        if (!$user) {
+            return false;
+        }
+
+        $permitted_locations = $user->permitted_locations();
+
         if ($permitted_locations == 'all' || in_array($location_id, $permitted_locations)) {
             return true;
         }
@@ -127,41 +133,46 @@ class User extends Authenticatable
      */
     public static function forDropdown($business_id, $prepend_none = true, $include_commission_agents = false, $prepend_all = false)
     {
-        $query = User::where('business_id', $business_id);
-        if (!$include_commission_agents) {
-            $query->where('is_cmmsn_agnt', 0);
-        }
+        $cacheKey = "users_dropdown_{$business_id}_{$include_commission_agents}_{$prepend_none}_{$prepend_all}";
+        $users = cache()->remember($cacheKey, 54000, function () use ($business_id, $include_commission_agents, $prepend_none, $prepend_all) {
+            $query = User::where('business_id', $business_id);
+            if (!$include_commission_agents) {
+                $query->where('is_cmmsn_agnt', 0);
+            }
 
-        $all_users = $query->select('id', DB::raw("CONCAT(COALESCE(surname, ''),' ',COALESCE(first_name, ''),' ',COALESCE(last_name,'')) as full_name"));
+            $all_users = $query->select('id', DB::raw("CONCAT(COALESCE(surname, ''),' ',COALESCE(first_name, ''),' ',COALESCE(last_name,'')) as full_name"));
 
-        $users = $all_users->pluck('full_name', 'id');
+            $users = $all_users->pluck('full_name', 'id');
 
-        //Prepend none
-        if ($prepend_none) {
-            $users = $users->prepend(__('lang_v1.none'), '');
-        }
+            //Prepend none
+            if ($prepend_none) {
+                $users = $users->prepend(__('lang_v1.none'), '');
+            }
 
-        //Prepend all
-        if ($prepend_all) {
-            $users = $users->prepend(__('lang_v1.all'), '');
-        }
-        
+            //Prepend all
+            if ($prepend_all) {
+                $users = $users->prepend(__('lang_v1.all'), '');
+            }
+
+            return $users;
+        });
+
         return $users;
     }
 
     /**
-    * Return list of sales commission agents dropdown for a business
-    *
-    * @param $business_id int
-    * @param $prepend_none = true (boolean)
-    *
-    * @return array users
-    */
+     * Return list of sales commission agents dropdown for a business
+     *
+     * @param $business_id int
+     * @param $prepend_none = true (boolean)
+     *
+     * @return array users
+     */
     public static function saleCommissionAgentsDropdown($business_id, $prepend_none = true)
     {
         $all_cmmsn_agnts = User::where('business_id', $business_id)
-                        ->where('is_cmmsn_agnt', 1)
-                        ->select('id', DB::raw("CONCAT(COALESCE(surname, ''),' ',COALESCE(first_name, ''),' ',COALESCE(last_name,'')) as full_name"));
+            ->where('is_cmmsn_agnt', 1)
+            ->select('id', DB::raw("CONCAT(COALESCE(surname, ''),' ',COALESCE(first_name, ''),' ',COALESCE(last_name,'')) as full_name"));
 
         $users = $all_cmmsn_agnts->pluck('full_name', 'id');
 
@@ -183,15 +194,20 @@ class User extends Authenticatable
      */
     public static function allUsersDropdown($business_id, $prepend_none = true)
     {
-        $all_users = User::where('business_id', $business_id)
-                        ->select('id', DB::raw("CONCAT(COALESCE(surname, ''),' ',COALESCE(first_name, ''),' ',COALESCE(last_name,'')) as full_name"));
+        $cacheKey = "all_users_dropdown_{$business_id}_{$prepend_none}";
+        $users = cache()->remember($cacheKey, 54000, function () use ($business_id, $prepend_none) {
+            $all_users = User::where('business_id', $business_id)
+                ->select('id', DB::raw("CONCAT(COALESCE(surname, ''),' ',COALESCE(first_name, ''),' ',COALESCE(last_name,'')) as full_name"));
 
-        $users = $all_users->pluck('full_name', 'id');
+            $users = $all_users->pluck('full_name', 'id');
 
-        //Prepend none
-        if ($prepend_none) {
-            $users = $users->prepend('None', '');
-        }
+            //Prepend none
+            if ($prepend_none) {
+                $users = $users->prepend('None', '');
+            }
+
+            return $users;
+        });
 
         return $users;
     }
@@ -215,7 +231,7 @@ class User extends Authenticatable
     {
         $user = User::findOrFail($user_id);
 
-        return (boolean)$user->selected_contacts;
+        return (bool)$user->selected_contacts;
     }
 
     public function getRoleNameAttribute()

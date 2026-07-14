@@ -68,7 +68,9 @@ class CashRegisterUtil extends Util
                 } else {
                     $dolar = $payment['dolar'];
                 }
-                if ($payment['method_card'] == 'card') {
+                if ($payment['method_cheque'] == 'cheque') {
+                    $method = 'cheque';
+                } elseif ($payment['method_card'] == 'card') {
                     $method = 'card';
                 } else {
                     $method = $payment['method'];

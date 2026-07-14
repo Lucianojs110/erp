@@ -381,9 +381,24 @@ class ProductUtil extends Util
     public function getDetailsFromVariation($variation_id, $business_id, $location_id = null, $check_qty = true)
     {
 
+        
+        if (empty($location_id)) {
+            $default_location = BusinessLocation::where('business_id', $business_id)
+                              ->first();
+            
+            if (!$default_location) {
+                throw new \Exception("No default location found for business");
+            }
+            
+            $location_id = $default_location->id;
+        }
+        
         $vld = VariationLocationDetails::where('variation_id', $variation_id)
                 ->where('location_id', $location_id)
                 ->first();
+
+
+                
 
         if (empty($vld)) {
             $vld = VariationLocationDetails::where('variation_id', $variation_id)

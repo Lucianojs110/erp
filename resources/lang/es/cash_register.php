@@ -9,7 +9,7 @@
 "open_register" => "Abrir registro",
 "register_details" => "Registrar detalles",
 "cash_payment" => "Pago en efectivo",
-"checque_payment" => "Verificar pago",
+"cheque_payment" => "Pago con cheques",
 "card_payment" => "Pago con tarjeta",
 "bank_transfer" => "Transferencia bancaria",
 "other_payments" => "Otros pagos",

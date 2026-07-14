@@ -11,10 +11,13 @@
 |
 */
 
+use App\Http\Controllers\ContactBankDetailsController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 include_once('install_r.php');
+
+
 
 Route::middleware(['IsInstalled'])->group(function () {
     Route::get('/', function () {
@@ -34,17 +37,19 @@ Route::middleware(['IsInstalled'])->group(function () {
 
 //Routes for authenticated users only
 Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezone'])->group(function () {
-    Route::get('/logout', 'Auth\LoginController@logout')->name('logout');
-
-    Route::get('/', 'HomeController@index')->name('home');
-    Route::get('/home', 'HomeController@index')->name('home');
+    Route::get('/logout', 'Auth\LoginController@logout');
+    Route::post('/contacts/bank-details', [ContactBankDetailsController::class, 'save']);
+    Route::post('/contacts/bank-details/edit', [ContactBankDetailsController::class, 'edit']);
+    Route::post('/contacts/bank-details/delete', [ContactBankDetailsController::class, 'delete']);
+    Route::get('/', 'HomeController@index');
+    Route::get('/home', 'HomeController@index');
     Route::get('/home/get-totals', 'HomeController@getTotals');
     Route::get('/home/product-stock-alert', 'HomeController@getProductStockAlert');
     Route::get('/home/purchase-payment-dues', 'HomeController@getPurchasePaymentDues');
     Route::get('/home/sales-payment-dues', 'HomeController@getSalesPaymentDues');
 
     Route::get('/load-more-notifications', 'HomeController@loadMoreNotifications');
-    
+
     Route::get('/business/settings', 'BusinessController@getBusinessSettings')->name('business.getBusinessSettings');
     Route::post('/business/update', 'BusinessController@postBusinessSettings')->name('business.postBusinessSettings');
     Route::get('/user/profile', 'UserController@getProfile')->name('user.getProfile');
@@ -52,7 +57,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::post('/user/update-password', 'UserController@updatePassword')->name('user.updatePassword');
 
     Route::resource('brands', 'BrandController');
-    
+
     Route::resource('payment-account', 'PaymentAccountController');
 
     Route::resource('tax-rates', 'TaxRateController');
@@ -82,7 +87,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::get('/products/list-no-variation', 'ProductController@getProductsWithoutVariations');
     Route::get('products/massiveUpdate', 'ProductController@massiveUpdate');
     Route::post('products/masiveUpdatePercent', 'ProductController@massiveUpdatePercent')->name('products.massiveUpdatePercent');
-    
+
     Route::post('/products/get_sub_categories', 'ProductController@getSubCategories');
     Route::post('/products/product_form_part', 'ProductController@getProductVariationFormPart');
     Route::post('/products/get_product_variation_row', 'ProductController@getProductVariationRow');
@@ -92,7 +97,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::get('/products/quick_add', 'ProductController@quickAdd');
     Route::post('/products/save_quick_product', 'ProductController@saveQuickProduct');
     Route::post('products/selectionUpdate', 'ProductController@selectionUpdate')->name('products.selectionUpdate');
-    
+
     Route::resource('products', 'ProductController')->names('products');
 
     Route::get('/purchases/get_products', 'PurchaseController@getProducts')->name('purchases.getProducts');
@@ -101,7 +106,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::post('/purchases/check_ref_number', 'PurchaseController@checkRefNumber');
     Route::get('/purchases/print/{id}', 'PurchaseController@printInvoice');
     Route::resource('purchases', 'PurchaseController');
-    
+
     //ventas
     Route::get('/toggle-subscription/{id}', 'SellPosController@toggleRecurringInvoices');
     Route::get('/sells/subscriptions', 'SellPosController@listSubscriptions');
@@ -115,8 +120,8 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::post('/requestCae', 'SellController@requestCae')->name('requestCae');
     Route::get('/consultarpunto', 'SellPosController@consultar_punto');
     Route::get('/consultarfactura/{id}', 'SellPosController@consultar_factura');
-  
-    
+
+
     Route::get('/sells/pos/get_product_row/{variation_id}/{location_id}', 'SellPosController@getProductRow');
     Route::post('/sells/pos/get_payment_row', 'SellPosController@getPaymentRow');
     Route::get('/sells/pos/get-recent-transactions', 'SellPosController@getRecentTransactions');
@@ -133,6 +138,10 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
 
     Route::get('/barcodes/set_default/{id}', 'BarcodeController@setDefault');
     Route::resource('barcodes', 'BarcodeController');
+
+    //Cheques
+    Route::patch('/update-check-state', 'SellPosController@updateCheckState');
+    Route::get('/cheques-resume', 'ReportController@getChequesResume');
 
     //Invoice schemes..
     Route::get('/invoice-schemes/set_default/{id}', 'InvoiceSchemeController@setDefault');
@@ -160,6 +169,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::get('/reports/expense-report', 'ReportController@getExpenseReport');
     Route::get('/reports/stock-adjustment-report', 'ReportController@getStockAdjustmentReport');
     Route::get('/reports/register-report', 'ReportController@getRegisterReport');
+    Route::get('/reports/cheques-report', 'ReportController@getChequeReport')->name('cheque.report');
     Route::get('/reports/sales-representative-report', 'ReportController@getSalesRepresentativeReport');
     Route::get('/reports/sales-representative-total-expense', 'ReportController@getSalesRepresentativeTotalExpense');
     Route::get('/reports/sales-representative-total-sell', 'ReportController@getSalesRepresentativeTotalSell');
@@ -179,7 +189,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::get('/reports/get-profit/{by?}', 'ReportController@getProfit');
     Route::get('/reports/items-report', 'ReportController@itemsReport');
     Route::get('reports/stock_value_total', 'ReportController@getStockValueTotal')->name('stock_value_total');
-    
+
     //Business Location Settings...
     Route::prefix('business-location/{location_id}')->name('location.')->group(function () {
         Route::get('settings', 'LocationSettingsController@index')->name('settings');
@@ -239,7 +249,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     //Stock Transfer
     Route::get('stock-transfers/print/{id}', 'StockTransferController@printInvoice');
     Route::resource('stock-transfers', 'StockTransferController');
-    
+
     Route::get('/opening-stock/add/{product_id}', 'OpeningStockController@add');
     Route::post('/opening-stock/save', 'OpeningStockController@save');
 
@@ -260,12 +270,14 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::get('sell-return/get-product-row', 'SellReturnController@getProductRow');
     Route::get('/sell-return/print/{id}', 'SellReturnController@printInvoice');
     Route::get('/sell-return/add/{id}', 'SellReturnController@add');
-    
+
     //Backup
     Route::get('backup/download/{file_name}', 'BackUpController@download');
     Route::get('backup/delete/{file_name}', 'BackUpController@delete');
     Route::resource('backup', 'BackUpController', ['only' => [
-        'index', 'create', 'store'
+        'index',
+        'create',
+        'store'
     ]]);
 
 
@@ -304,7 +316,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
         Route::post('/link-account', 'AccountReportsController@postLinkAccount');
         Route::get('/cash-flow', 'AccountController@cashFlow');
     });
-    
+
 
     //Restaurant module
     Route::group(['prefix' => 'modules'], function () {
@@ -331,4 +343,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
 
     Route::get('bookings/get-todays-bookings', 'Restaurant\BookingController@getTodaysBookings');
     Route::resource('bookings', 'Restaurant\BookingController');
+
+    Route::post('business/usd-exchange-rate', 'BusinessController@updateUsdExchangeRate')->name('business.update-usd-exchange-rate');
+    Route::get('/business/usd-exchange-rate/status/{trackingId}', 'BusinessController@usdExchangeRateStatus')->name('business.usd-exchange-rate-status');
 });

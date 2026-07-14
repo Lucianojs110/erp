@@ -151,6 +151,7 @@
             <div class="input-group">
               <span class="input-group-addon">
                 <i class="fa fa-info"></i>
+          
               </span>
               {!! Form::select('iva', ['RESPONSABLE INSCRIPTO' => 'RESPONSABLE INSCRIPTO', 'CONSUMIDOR FINAL' => 'CONSUMIDOR FINAL', 'MONOTRIBUTO' => 'MONOTRIBUTO', 'EXENTO' => 'EXENTO'], '', ['class' => 'form-control pull-left','placeholder' => __('messages.please_select')]); !!}
             </div>
@@ -309,7 +310,10 @@
               'placeholder' => __('business.landmark')]); !!}
             </div>
           </div>
+          
         </div>
+       
+        
         <div class="@if(isset($quick_add)) hide @endif">
           <div class="clearfix"></div>
           <div class="col-md-12">

@@ -43,7 +43,7 @@ class CustomerGroupController extends Controller
                     ->make(false);
         }
 
-        return view('customer_group.index');
+        return view('delivery.customer_group.index');
     }
 
     /**

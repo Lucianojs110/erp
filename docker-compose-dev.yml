@@ -1,0 +1,56 @@
+services:
+  erp:
+    container_name: erp
+    build: .
+    ports:
+      - "8000:80"
+    volumes:
+      - .:/var/www/html
+      - ./apache/laravel.conf:/etc/apache2/sites-available/laravel.conf
+    # image: bitnami/laravel:8.6.1-debian-10-r2
+    # ports:
+    #   - "8000:3000"
+    # volumes:
+    #   - .:/app
+    env_file:
+      - .env  
+    tty: true  
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: erp_db
+      DB_USERNAME: root
+      DB_PASSWORD: user
+      ALLOW_REGISTRATION: true
+    depends_on:
+      - mysql
+
+  mysql:
+    image: mysql:5.7
+    container_name: mysql
+    restart: unless-stopped
+    expose:
+      - "3306" 
+ 
+    environment:
+      MYSQL_ROOT_PASSWORD: user
+      MYSQL_DATABASE: erp_db
+    command: --init-file /data/application/init.sql
+    volumes:
+      - mysql_data_erp:/var/lib/mysql
+      - ./init.sql:/data/application/init.sql
+  phpmyadmin:
+    depends_on:
+      - mysql
+    image: phpmyadmin
+    restart: always
+    ports:
+      - "8090:80"
+    environment:
+      PMA_HOST: mysql
+      MYSQL_ROOT_PASSWORD: user
+
+
+volumes:
+  mysql_data_erp:

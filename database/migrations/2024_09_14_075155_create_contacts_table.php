@@ -41,6 +41,10 @@ class CreateContactsTable extends Migration
             $table->string('custom_field2')->nullable();
             $table->string('custom_field3')->nullable();
             $table->string('custom_field4')->nullable();
+            $table->string('cbu')->nullable();
+            $table->string('bank_account_number')->nullable();
+            $table->string('bank')->nullable();
+            $table->string('alias')->nullable();
             $table->timestamp('deleted_at')->nullable();
             $table->timestamps();
             

@@ -319,7 +319,7 @@
 
 	@component('components.widget', ['class' => 'box-primary', 'title' => __('purchase.add_payment')])
 		<div class="box-body payment_row">
-			@include('sale_pos.partials.payment_row_form', ['row_index' => 0])
+			@include('sale_pos.partials.payment_row_form', ['row_index' => 0]) 
 			<hr>
 			<div class="row">
 				<div class="col-sm-12">

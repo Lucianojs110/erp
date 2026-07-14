@@ -33,6 +33,7 @@ class CreateInvoiceLayoutsTable extends Migration
             $table->string('tax_label')->nullable();
             $table->string('total_label')->nullable();
             $table->string('total_due_label')->nullable();
+            $table->string('iva_label')->nullable();
             $table->string('paid_label')->nullable();
             $table->boolean('show_client_id')->default(0);
             $table->string('client_id_label')->nullable();

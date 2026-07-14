@@ -134,6 +134,20 @@
                 </div>
             </div>
         </div>
+          <!-- Esto agregue para el checkbox lleva bolsa -->
+        <div class="col-sm-4">
+            <div class="form-group">
+                <div class="checkbox">
+                <br>
+                  <label>
+                    {!! Form::checkbox('pos_settings[carries_a_bag]', 1,  
+                        $pos_settings['carries_a_bag'] , 
+                    [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.carries_a_bag' ) }}
+                  </label>
+                </div>
+            </div>
+        </div>
+                    <!-- Esto agregue para el checkbox lleva bolsa -->
 
         <div class="col-sm-4">
             <div class="form-group">

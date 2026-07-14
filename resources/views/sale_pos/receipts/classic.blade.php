@@ -158,10 +158,10 @@
                 @endif
 
                 <!--
-                @if (!empty($receipt_details->customer_info))
-                {!! $receipt_details->customer_info !!}
-                @endif
-                 @if (!empty($receipt_details->client_id_label))
+    @if (!empty($receipt_details->customer_info))
+{!! $receipt_details->customer_info !!}
+@endif
+    @if (!empty($receipt_details->client_id_label))
 <br/>
      <b>{{ $receipt_details->client_id_label }}</b> {{ $receipt_details->client_id }}
 @endif
@@ -216,22 +216,22 @@
         </p>
     </div>
 
-	@if(!empty($receipt_details->defects_label) || !empty($receipt_details->repair_defects))
-	<div class="col-xs-12">
-		<br>
-		@if(!empty($receipt_details->defects_label))
-		<b>{!! $receipt_details->defects_label !!}</b>
-		@endif
-		{{$receipt_details->repair_defects}}
-	</div>
-	@endif
-	<!-- /.col -->
+    @if (!empty($receipt_details->defects_label) || !empty($receipt_details->repair_defects))
+        <div class="col-xs-12">
+            <br>
+            @if (!empty($receipt_details->defects_label))
+                <b>{!! $receipt_details->defects_label !!}</b>
+            @endif
+            {{ $receipt_details->repair_defects }}
+        </div>
+    @endif
+    <!-- /.col -->
 
-	@if($receipt_details->transaction_detail != "" || $receipt_details->transaction_detail != null)
-		<span class="pull-left text-right">
-			<p style="padding: 0 15px 0 15px;"><b>Detalle: </b>{{ $receipt_details->transaction_detail }}</p>
-		</span>
-	@endif
+    @if ($receipt_details->transaction_detail != '' || $receipt_details->transaction_detail != null)
+        <span class="pull-left text-right">
+            <p style="padding: 0 15px 0 15px;"><b>Detalle: </b>{{ $receipt_details->transaction_detail }}</p>
+        </span>
+    @endif
 
 </div>
 
@@ -284,11 +284,12 @@
                         <td>{{ $line['quantity'] }} {{ $line['units'] }} </td>
 
                         @if ($receipt_details->type_invoice == 'A')
-                            <td>{{ $line['unit_price'] }}</td>
+                            <td>$ {{ $line['unit_price'] }}</td>
 
-                            <td>{{ $line['line_total_A'] }}</td>
+                            <td>$ {{ $line['line_total_A'] }}</td>
                         @else
                             <td>{{ $line['unit_price_inc_tax'] }}</td>
+
                             <td>{{ $line['line_total'] }}</td>
                         @endif
 
@@ -339,7 +340,7 @@
             <!-- Tax -->
             @if (!empty($receipt_details->cae))
 
-                @if ($receipt_details->type_invoice == 'A')
+                @if ($receipt_details->type_invoice == 'A' || $receipt_details->type_invoice == 'B')
 
                     <tr>
                         <th>
@@ -357,7 +358,7 @@
                                 Descuento
                             </th>
                             <td>
-							
+
                                 @if ($receipt_details->discount_type == 'percentage')
                                     (-) {{ $receipt_details->discount_amount }}%
                                 @else
@@ -441,7 +442,6 @@
                     <td>
                         (-) {{ $receipt_details->discount }}
                     </td>
-
                 </tr>
             @endif
 
@@ -451,14 +451,9 @@
                     <tr>
                         <th>{{ $payment['method'] }}</th>
                         <td>{{ $payment['amount'] }}</td>
-
                     </tr>
                 @endforeach
             @endif
-
-
-
-
 
 
             <!-- Total Paid-->
@@ -495,6 +490,8 @@
                     </td>
                 </tr>
             @endif
+
+          
 
             <!-- Shipping Charges -->
             @if (!empty($receipt_details->shipping_charges))

@@ -11,6 +11,9 @@ npm-debug.log
 /public/uploads/business_logos
 /public/uploads/documents
 /public/uploads/img
+/public/img
+!/public/img/logo.jpg
+
 /public/uploads/invoice_logos
 /public/uploads/UltimatePOS
 /dbdata
@@ -19,5 +22,5 @@ docker-compose.yml
 *.sql
 /storage/*
 /storage/app/public
-/storage/logs
-/storage/logs/*
+storage/framework/cache/data/85/5f/855f92484c8c414d36c1b25cb24876e30229cbbf
+.qodo

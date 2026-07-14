@@ -25,8 +25,10 @@ class SellingPriceGroup extends Model
      */
     public static function forDropdown($business_id)
     {
-        $price_groups = SellingPriceGroup::where('business_id', $business_id)
-                                    ->get();
+        $cacheKey = 'selling_price_groups_' . $business_id;
+        $price_groups = cache()->remember($cacheKey, 54000, function() use ($business_id) {
+            return SellingPriceGroup::where('business_id', $business_id)->get();
+        });
 
         $dropdown = [];
 
@@ -36,7 +38,7 @@ class SellingPriceGroup extends Model
         
         foreach ($price_groups as $price_group) {
             if (auth()->user()->can('selling_price_group.' . $price_group->id)) {
-                $dropdown[$price_group->id] = $price_group->name;
+            $dropdown[$price_group->id] = $price_group->name;
             }
         }
         return $dropdown;

@@ -79,4 +79,7 @@
 "operations" => "Operaciones",
 "keyboard_shortcut" => "Atajo de teclado",
 "business_created_succesfully" => "¡Empresas creadas con éxito!", /* modified */
+"bank" => "Banco",
+"account_number" => "Número de cuenta",
+
 ];

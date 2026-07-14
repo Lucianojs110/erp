@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 use Spatie\Permission\Models\Permission;
+use App\Jobs\UpdateUsdProductPrices;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class BusinessController extends Controller
 {
@@ -323,11 +326,20 @@ class BusinessController extends Controller
 
         $shortcuts = json_decode($business->keyboard_shortcuts, true);
 
-        if (empty($business->pos_settings)) {
-            $pos_settings = $this->businessUtil->defaultPosSettings();
-        } else {
-            $pos_settings = json_decode($business->pos_settings, true);
+        $defaultSettings = $this->businessUtil->defaultPosSettings();
+        $pos_settings = json_decode($business->pos_settings, true);
+
+        foreach ($defaultSettings as $key => $value) {
+            if (!array_key_exists($key, $pos_settings)) {
+                $pos_settings[$key] = $value;
+            }
         }
+
+        // if (empty($business->pos_settings)) {
+        //     $pos_settings = $this->businessUtil->defaultPosSettings();
+        // } else {
+        //     $pos_settings = json_decode($business->pos_settings, true);
+        // }
 
         $email_settings = [];
         if (empty($business->email_settings)) {
@@ -368,11 +380,37 @@ class BusinessController extends Controller
 
         try {
             $business_details = $request->only([
-                'name', 'business_name', 'start_date',  'currency_id',  'default_profit_percent', 'default_sales_tax', 'default_sales_discount', 'sell_price_tax', 'sku_prefix', 'time_zone', 'fy_start_month', 'accounting_method', 'transaction_edit_days', 'sales_cmsn_agnt', 'item_addition_method', 'currency_symbol_placement', 'on_product_expiry',
-                'stop_selling_before', 'default_unit', 'expiry_type', 'date_format', 'time_format', 'ref_no_prefixes', 'theme_color', 'email_settings', 'sms_settings', 'invoice_limit_card', 'invoice_register_limit'
+                'name',
+                'business_name',
+                'start_date',
+                'currency_id',
+                'default_profit_percent',
+                'default_sales_tax',
+                'default_sales_discount',
+                'sell_price_tax',
+                'sku_prefix',
+                'time_zone',
+                'fy_start_month',
+                'accounting_method',
+                'transaction_edit_days',
+                'sales_cmsn_agnt',
+                'item_addition_method',
+                'currency_symbol_placement',
+                'on_product_expiry',
+                'stop_selling_before',
+                'default_unit',
+                'expiry_type',
+                'date_format',
+                'time_format',
+                'ref_no_prefixes',
+                'theme_color',
+                'email_settings',
+                'sms_settings',
+                'invoice_limit_card',
+                'invoice_register_limit'
             ]);
 
-            
+
 
             if (!empty($business_details['start_date'])) {
                 $business_details['start_date'] = Carbon::createFromFormat('m/d/Y', $business_details['start_date'])->toDateString();
@@ -409,9 +447,17 @@ class BusinessController extends Controller
             }
 
             $checkboxes = [
-                'enable_editing_product_from_purchase', 'enable_inline_tax',
-                'enable_brand', 'enable_category', 'enable_sub_category', 'enable_price_tax', 'enable_purchase_status',
-                'enable_lot_number', 'enable_racks', 'enable_row', 'enable_position'
+                'enable_editing_product_from_purchase',
+                'enable_inline_tax',
+                'enable_brand',
+                'enable_category',
+                'enable_sub_category',
+                'enable_price_tax',
+                'enable_purchase_status',
+                'enable_lot_number',
+                'enable_racks',
+                'enable_row',
+                'enable_position'
             ];
             foreach ($checkboxes as $value) {
                 $business_details[$value] = !empty($request->input($value)) &&  $request->input($value) == 1 ? 1 : 0;
@@ -505,5 +551,190 @@ class BusinessController extends Controller
             echo "false";
             exit;
         }
+    }
+
+    /**
+     * Updates the USD exchange rate for the current business.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateUsdExchangeRate(Request $request)
+    {
+        if (
+            !auth()
+                ->user()
+                ->can('business_settings.access')
+        ) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'usd_exchange_rate' => [
+                'required',
+                'numeric',
+                'min:0.0001',
+            ],
+        ], [
+            'usd_exchange_rate.required' =>
+            'Debe ingresar la cotización del dólar.',
+
+            'usd_exchange_rate.numeric' =>
+            'La cotización debe ser un número válido.',
+
+            'usd_exchange_rate.min' =>
+            'La cotización debe ser mayor que cero.',
+        ]);
+
+        $trackingId = null;
+
+        try {
+            $business_id = $request
+                ->session()
+                ->get('user.business_id');
+
+            $business = Business::findOrFail($business_id);
+
+            $exchangeRate = (float) $request->input(
+                'usd_exchange_rate'
+            );
+
+            $business->usd_exchange_rate = $exchangeRate;
+            $business->save();
+
+            /*
+         * Actualiza los datos del negocio guardados en sesión.
+         */
+            $request->session()->put(
+                'business',
+                $business->fresh()
+            );
+
+            /*
+         * Identificador único para consultar este Job.
+         */
+            $trackingId = (string) Str::uuid();
+
+            Cache::put(
+                'usd_price_update_status_' . $trackingId,
+                [
+                    'status' => 'queued',
+                    'message' =>
+                    'La actualización de precios está en cola.',
+                    'business_id' => (int) $business->id,
+                    'exchange_rate' => $exchangeRate,
+                    'tracking_id' => $trackingId,
+                    'updated_count' => 0,
+                    'total_count' => 0,
+                    'created_at' => now()->toDateTimeString(),
+                ],
+                now()->addHours(2)
+            );
+
+            /*
+         * Despacha el mismo Job existente.
+         */
+            UpdateUsdProductPrices::dispatch(
+                $business->id,
+                $exchangeRate,
+                $trackingId
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' =>
+                'La cotización fue actualizada. Los precios de los productos se están recalculando.',
+
+                'usd_exchange_rate' =>
+                $business->usd_exchange_rate,
+
+                'tracking_id' => $trackingId,
+
+                'status_url' => route(
+                    'business.usd-exchange-rate-status',
+                    [
+                        'trackingId' => $trackingId,
+                    ]
+                ),
+            ]);
+        } catch (\Exception $e) {
+            Log::error(
+                'Error updating USD exchange rate.',
+                [
+                    'business_id' => $request
+                        ->session()
+                        ->get('user.business_id'),
+
+                    'error' => $e->getMessage(),
+
+                    'trace' => $e->getTraceAsString(),
+                ]
+            );
+
+            if (!empty($trackingId)) {
+                Cache::put(
+                    'usd_price_update_status_' .
+                        $trackingId,
+                    [
+                        'status' => 'failed',
+                        'message' =>
+                        'No se pudo iniciar la actualización de precios.',
+                        'error' => $e->getMessage(),
+                        'finished_at' =>
+                        now()->toDateTimeString(),
+                    ],
+                    now()->addHours(2)
+                );
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' =>
+                'No se pudo actualizar la cotización del dólar.',
+            ], 500);
+        }
+    }
+
+    public function usdExchangeRateStatus(
+        Request $request,
+        $trackingId
+    ) {
+        if (
+            !auth()
+                ->user()
+                ->can('business_settings.access')
+        ) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $businessId = (int) $request
+            ->session()
+            ->get('user.business_id');
+
+        $status = Cache::get(
+            'usd_price_update_status_' . $trackingId
+        );
+
+        if (
+            empty($status) ||
+            (int) data_get($status, 'business_id') !==
+            $businessId
+        ) {
+            return response()->json([
+                'success' => false,
+                'status' => 'not_found',
+                'message' =>
+                'No se encontró el estado de la actualización.',
+            ], 404);
+        }
+
+        return response()->json(
+            array_merge(
+                [
+                    'success' => true,
+                ],
+                $status
+            )
+        );
     }
 }

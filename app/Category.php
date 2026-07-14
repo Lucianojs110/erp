@@ -30,21 +30,27 @@ class Category extends Model
      */
     public static function catAndSubCategories($business_id)
     {
-        $categories = Category::where('business_id', $business_id)
-                        ->where('parent_id', 0)
-                        ->orderBy('name', 'asc')
-                        ->get()
-                        ->toArray();
+        $cacheKey = "categories_{$business_id}";
+        $categories = cache()->remember($cacheKey, 54000, function() use ($business_id) {
+            return Category::where('business_id', $business_id)
+                ->where('parent_id', 0)
+                ->orderBy('name', 'asc')
+                ->get()
+                ->toArray();
+        });
 
         if (empty($categories)) {
             return [];
         }
 
-        $sub_categories = Category::where('business_id', $business_id)
-                            ->where('parent_id', '!=', 0)
-                            ->orderBy('name', 'asc')
-                            ->get()
-                            ->toArray();
+        $sub_cacheKey = "sub_categories_{$business_id}";
+        $sub_categories = cache()->remember($sub_cacheKey, 54000, function() use ($business_id) {
+            return Category::where('business_id', $business_id)
+                    ->where('parent_id', '!=', 0)
+                    ->orderBy('name', 'asc')
+                    ->get()
+                    ->toArray();
+        });
         $sub_cat_by_parent = [];
 
         if (!empty($sub_categories)) {
@@ -68,9 +74,12 @@ class Category extends Model
 
     public static function forDropdown($business_id)
     {
-        $categories = Category::where('business_id', $business_id)
-                            ->where('parent_id', 0)
-                            ->pluck('name', 'id');
+        $cacheKey = "categories_for_dropdown_{$business_id}";
+        $categories = cache()->remember($cacheKey, 54000, function() use ($business_id) {
+            return Category::where('business_id', $business_id)
+                    ->where('parent_id', 0)
+                    ->pluck('name', 'id');
+        });
         return $categories;
     }
 }

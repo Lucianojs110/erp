@@ -8,7 +8,7 @@
 | Routes related to installation of the software
 |
 */
-
+Route::post('/signin','Auth\RegisterController@create');
 Route::get('/install-start', 'Install\InstallController@index')->name('install.index');
 Route::get('/install/check-server', 'Install\InstallController@checkServer')->name('install.checkServer');
 Route::get('/install/details', 'Install\InstallController@details')->name('install.details');

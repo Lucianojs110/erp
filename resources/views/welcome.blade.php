@@ -82,7 +82,21 @@
                         <a href="{{ action('Auth\LoginController@login') }}">@lang('lang_v1.login')</a>
                         @if(env('ALLOW_REGISTRATION', true))
                             <a href="{{ route('business.getRegister') }}">@lang('lang_v1.register')</a>
-                        @endif
+                        @Route::middleware(['IsInstalled'])->group(function () {
+    Route::get('/', function () {
+        return view('welcome');
+    });
+
+    Auth::routes();
+
+    Route::get('/business/register', 'BusinessController@getRegister')->name('business.getRegister');
+    Route::post('/business/register', 'BusinessController@postRegister')->name('business.postRegister');
+    Route::post('/business/register/check-username', 'BusinessController@postCheckUsername')->name('business.postCheckUsername');
+    Route::post('/business/register/check-email', 'BusinessController@postCheckEmail')->name('business.postCheckEmail');
+
+    Route::get('/invoice/{token}', 'SellPosController@showInvoice')
+        ->name('show_invoice');
+});
                     @endif
                 @endif
 

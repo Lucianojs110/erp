@@ -86,6 +86,7 @@
 
 								{!! Form::hidden("payment[0][method_cash]", '', ['class' => 'form-control ',  'id' => "method_cash_0", 'style']); !!}
 								{!! Form::hidden("payment[0][method_card]", '', ['class' => 'form-control ',  'id' => "method_card_0", 'style']); !!}
+								{!! Form::hidden("payment[0][method_cheque]", '', ['class' => 'form-control ', 'id' => "method_cheque_0", 'style']); !!}
 								<div class="col-md-12">
 									{{-- boton para venta efectivo --}}
 									<button type="button" class="btn btn-success btn-block btn-flat btn-lg no-print @if($pos_settings['disable_express_checkout'] != 0) hide @endif pos-express-btn pos-express-finalize-pay"

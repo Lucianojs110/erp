@@ -241,6 +241,7 @@
 			        </div>
 			    </div>
 			    <div class="col-md-4"><br>
+			
 			    	<b>@lang( 'sale.discount_amount' ):</b>(-) 
 					<span class="display_currency" id="total_discount">0</span>
 			    </div>

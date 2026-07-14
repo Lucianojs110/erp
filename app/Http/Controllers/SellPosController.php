@@ -43,6 +43,7 @@ use App\TaxRate;
 use App\Transaction;
 use App\TransactionSellLine;
 use App\User;
+use App\Cheques;
 
 use App\Utils\BusinessUtil;
 use App\Utils\CashRegisterUtil;
@@ -62,7 +63,8 @@ use App\Utils\DeliveryUtil;
 use App\Withholding;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\{Auth,  Response, Session, Validator};
+use Illuminate\Support\Facades\{Auth, Cache, Response, Session, Validator};
+use Symfony\Component\Yaml\Yaml;
 
 use Yajra\DataTables\Facades\DataTables;
 
@@ -107,8 +109,27 @@ class SellPosController extends Controller
         $this->deliveryUtil = $deliveryUtil;
 
         $this->dummyPaymentLine = [
-            'method' => 'cash', 'amount' => 0, 'note' => '', 'card_transaction_number' => '', 'card_number' => '', 'card_type' => '', 'card_holder_name' => '', 'card_month' => '', 'card_year' => '', 'card_security' => '', 'cheque_number' => '', 'bank_account_number' => '',
-            'is_return' => 0, 'transaction_no' => ''
+            'method' => 'cash',
+            'amount' => 0,
+            'note' => '',
+            'card_transaction_number' => '',
+            'card_number' => '',
+            'card_type' => '',
+            'card_holder_name' => '',
+            'card_month' => '',
+            'card_year' => '',
+            'card_security' => '',
+            'cheque_number' => '',
+            'cheque_bank' => '',
+            'cheque_direction' => '',
+            'cheque_type' => '',
+            'cheque_issue_date' => '',
+            'cheque_direction' => '',
+            'cheque_deferral_date' => '',
+            'cheque_amount' => '',
+            'bank_account_number' => '',
+            'is_return' => 0,
+            'transaction_no' => ''
         ];
     }
 
@@ -170,8 +191,8 @@ class SellPosController extends Controller
 
 
         $walk_in_customer = $this->contactUtil->getWalkInCustomer($business_id);
-
         $business_details = $this->businessUtil->getDetails($business_id);
+        // $business_details = $this->businessUtil->getDetailsWithoutCache($business_id);
         $taxes = TaxRate::forBusinessDropdown($business_id, true, true);
         $payment_types = $this->productUtil->payment_types();
 
@@ -191,7 +212,9 @@ class SellPosController extends Controller
         //Shortcuts
         $shortcuts = json_decode($business_details->keyboard_shortcuts, true);
         $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
-
+        if (empty($pos_settings["carries_a_bag"])) {
+            $pos_settings["carries_a_bag"] = 0;
+        }
         $commsn_agnt_setting = $business_details->sales_cmsn_agnt;
         $commission_agent = [];
         if ($commsn_agnt_setting == 'user') {
@@ -229,6 +252,7 @@ class SellPosController extends Controller
         $price_groups = SellingPriceGroup::forDropdown($business_id);
 
         $withholdings = Withholding::get();
+
 
         return view('sale_pos.create')
             ->with(compact(
@@ -270,12 +294,13 @@ class SellPosController extends Controller
         $input = $request;
         $business_id = $request->session()->get('user.business_id');
         $bussines = Business::where('id', $business_id)->first();
+        $location = BusinessLocation::where('id', $input['location_id'])->first();
 
         $contact_id = $request->get('contact_id', null);
         $transaction_detail = $input['transaction_details'] ?? "";
-        //Log::debug($bussines);
+        Log::debug($input);
 
-        if ($bussines['tax_label_1'] == "RESPONSABLE INSCRIPTO" && $request->has('registrar')) {
+        if ($location['tax_label_1'] == "RESPONSABLE INSCRIPTO" && $request->has('registrar')) {
 
             // Verificar si hay productos sin tax_id
             $productsWithoutTaxId = array_filter($input['products'], function ($product) {
@@ -412,49 +437,53 @@ class SellPosController extends Controller
 
                 $products = $input['products'];
 
-                $input['iva21'] = null;
-                $input['iva27'] = null;
-                $input['iva10'] = null;
+                $input['iva21'] = 0;
+                $input['iva10'] = 0;
+                $input['iva27'] = 0;
+
+                $coeficientes = [
+                    '1' => 1.21,   // IVA 21%
+                    '2' => 1.105,  // IVA 10.5%
+                    '3' => 1.27,   // IVA 27%
+                ];
 
                 foreach ($products as $product) {
+                    $unit_price = floatval(str_replace(',', '', $product['unit_price']));
+                    $quantity = floatval($product['quantity']);
+                    $total = $unit_price * $quantity;
 
                     if ($product['tax_id'] == '1') {
-
-                        $tax_amount = $this->productUtil->num_uf($product['tax_amount']);
-                        $tax_amount = $tax_amount * $product['quantity'];
-                        $input['iva21'] = $input['iva21'] + $tax_amount;
-                    } else if ($product['tax_id'] == '2') {
-
-                        $tax_amount = $this->productUtil->num_uf($product['tax_amount']);
-                        $tax_amount = $tax_amount * $product['quantity'];
-                        $input['iva10'] = $input['iva10'] + $tax_amount;
-                    } else if ($product['tax_id'] == '3') {
-
-                        $tax_amount = $this->productUtil->num_uf($product['tax_amount']);
-                        $tax_amount = $tax_amount * $product['quantity'];
-                        $input['iva27'] = $input['iva27'] + $tax_amount;
+                        // IVA 21%
+                        $neto = round($total / 1.21, 2); // ejemplo: 1000 / 1.21 = 826.44
+                        $input['iva21'] += $neto;
+                    } elseif ($product['tax_id'] == '2') {
+                        // IVA 10.5%
+                        $neto = round($total / 1.105, 2);
+                        $input['iva10'] += $neto;
+                    } elseif ($product['tax_id'] == '3') {
+                        // IVA 27%
+                        $neto = round($total / 1.27, 2);
+                        $input['iva27'] += $neto;
                     }
                 }
 
                 if ($input['discount_amount'] != '0.00' &&  $input['discount_type'] == 'percentage') {
-
-                    $input['iva21']  = $input['iva21'] - ($input['iva21'] * $input['discount_amount'] / 100);
-                    $input['iva10']  = $input['iva10'] - ($input['iva10'] * $input['discount_amount'] / 100);
-                    $input['iva27']  = $input['iva27'] - ($input['iva27'] * $input['discount_amount'] / 100);
-                } else if ($input['discount_amount'] != '0.00' &&  $input['discount_type'] == 'fixed') {
-
-                    $discount = ($this->productUtil->num_uf($input['discount_amount']) * 100) /   $this->productUtil->num_uf($input['price_total']);;
-                    $input['iva21']  = $input['iva21'] - ($input['iva21'] * $discount / 100);
-                    $input['iva10']  = $input['iva10'] - ($input['iva10'] * $discount / 100);
-                    $input['iva27']  = $input['iva27'] - ($input['iva27'] * $discount / 100);
+                    $input['iva21'] -= ($input['iva21'] * $input['discount_amount'] / 100);
+                    $input['iva10'] -= ($input['iva10'] * $input['discount_amount'] / 100);
+                    $input['iva27'] -= ($input['iva27'] * $input['discount_amount'] / 100);
+                } elseif ($input['discount_amount'] != '0.00' &&  $input['discount_type'] == 'fixed') {
+                    $discount = ($input['discount_amount'] * 100) / $input['price_total'];
+                    $input['iva21'] -= ($input['iva21'] * $discount / 100);
+                    $input['iva10'] -= ($input['iva10'] * $discount / 100);
+                    $input['iva27'] -= ($input['iva27'] * $discount / 100);
                 }
 
+                $carries_a_bag =  $request->input('carries_a_bag') ? 1 : 0;
+                $transaction = $this->transactionUtil->createSellTransaction($business_id, $input, $invoice_total, $user_id, $carries_a_bag);
 
-                $transaction = $this->transactionUtil->createSellTransaction($business_id, $input, $invoice_total, $user_id);
-                
-                if($request->input('selected_withholdings') != '' && $request->input('selected_withholding_type') != 0) {
+                if ($request->input('selected_withholdings') != '' && $request->input('selected_withholding_type') != 0) {
                     $total_neto = (float) str_replace(',', '', $request->input('total_without_tax'));
-                    foreach($request->input('selected_withholdings') as $withholding) {
+                    foreach ($request->input('selected_withholdings') as $withholding) {
                         $wh = Withholding::find($withholding);
                         $extra = $total_neto * ($wh->percentage / 100);
                         DB::table('transaction_withholdings')->insert([
@@ -463,7 +492,7 @@ class SellPosController extends Controller
                             'total' => $extra,
                             'created_at' => now(),
                         ]);
-                        }
+                    }
                 }
 
                 $this->transactionUtil->createOrUpdateSellLines($transaction, $input['products'], $input['location_id']);
@@ -477,6 +506,24 @@ class SellPosController extends Controller
                 }
 
                 $input['payment'][0]['method'] == 'card';
+
+
+                if ($input['payment'][0]['method_cheque'] === 'cheque') {
+                    DB::table('cheques')->insert([
+                        'number' => $request->payment[0]['cheque_number'],
+                        'bank' => $request->payment[0]['cheque_bank'],
+                        'issue_date' => $request->payment[0]['cheque_issue_date'],
+                        'type' => $request->payment[0]['cheque_type'],
+                        'deferral_date' => $request->payment[0]['cheque_deferral_date'],
+                        'direction' => 'recibido',
+                        'amount' => $request->payment[0]['cheque_amount'],
+                        'business_id' => $business_id,
+                        'transaction_id' => $transaction->id,
+                        'payment_for' => $transaction->contact_id,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                };
 
                 //Log::emergency(print_r($input['payment'], true));
 
@@ -566,8 +613,6 @@ class SellPosController extends Controller
                 }
 
                 Media::uploadMedia($business_id, $transaction, $request, 'documents');
-
-
 
                 DB::commit();
 
@@ -709,17 +754,17 @@ class SellPosController extends Controller
         $receipt_details->transaction_detail = $transaction_detail;
 
         $witihholdings = DB::table('transaction_withholdings')->where('transaction_id', $transaction_id)->get();
-        
-        if(!$witihholdings->isEmpty()) {       
+
+        if (!$witihholdings->isEmpty()) {
             $receipt_details->withholding_type = Withholding::find($witihholdings->first()->withholding_id)->type == Withholding::PERCEPCIONES ? '+' : '-';
             $receipt_details->withholding_amount = $witihholdings->sum('total');
         }
 
         if ($is_package_slip) {
             $output['html_content'] = view('sale_pos.receipts.packing_slip', compact('receipt_details'))->render();
-            
+
             return $output;
-        } 
+        }
         //If print type browser - return the content, printer - return printer config data, and invoice format config
         if ($receipt_printer_type == 'printer') {
             $output['print_type'] = 'printer';
@@ -753,7 +798,7 @@ class SellPosController extends Controller
      */
     public function edit($id)
     {
-        
+
         if (!auth()->user()->can('sell.update')) {
             abort(403, 'Unauthorized action.');
         }
@@ -804,9 +849,8 @@ class SellPosController extends Controller
             } else {
                 return back()->with('status', ['success' => 0, 'msg' => __('Solo el vendedor puede editar esta venta.')]);
             }
-
         }
-        
+
         $location_id = $transaction->location_id;
         $location_printer_type = BusinessLocation::find($location_id)->receipt_printer_type;
 
@@ -866,7 +910,7 @@ class SellPosController extends Controller
                 DB::raw('vld.qty_available + transaction_sell_lines.quantity AS qty_available')
             )
             ->get();
-     
+
         if (!empty($sell_details)) {
             foreach ($sell_details as $key => $value) {
                 //If modifier sell line then unset
@@ -1080,45 +1124,74 @@ class SellPosController extends Controller
                 DB::beginTransaction();
 
 
-                $input['iva21'] = null;
-                $input['iva27'] = null;
-                $input['iva10'] = null;
+
 
                 $products = $input['products'];
 
+                $input['iva21'] = 0;
+                $input['iva10'] = 0;
+                $input['iva27'] = 0;
+
+                $coeficientes = [
+                    '1' => 1.21,   // IVA 21%
+                    '2' => 1.105,  // IVA 10.5%
+                    '3' => 1.27,   // IVA 27%
+                ];
+
                 foreach ($products as $product) {
+                    $unit_price = floatval(str_replace(',', '', $product['unit_price']));
+                    $quantity = floatval($product['quantity']);
+                    $total = $unit_price * $quantity;
 
                     if ($product['tax_id'] == '1') {
-
-                        $tax_amount = $this->productUtil->num_uf($product['tax_amount']);
-                        $tax_amount = $tax_amount * $product['quantity'];
-                        $input['iva21'] = $input['iva21'] + $tax_amount;
-                    } else if ($product['tax_id'] == '2') {
-                        $tax_amount = $this->productUtil->num_uf($product['tax_amount']);
-                        $tax_amount = $tax_amount * $product['quantity'];
-                        $input['iva10'] = $input['iva10'] + $tax_amount;
-                    } else if ($product['tax_id'] == '3') {
-
-                        $tax_amount = $this->productUtil->num_uf($product['tax_amount']);
-                        $tax_amount = $tax_amount * $product['quantity'];
-                        $input['iva27'] = $input['iva27'] + $tax_amount;
+                        // IVA 21%
+                        $neto = round($total / 1.21, 2); // ejemplo: 1000 / 1.21 = 826.44
+                        $input['iva21'] += $neto;
+                    } elseif ($product['tax_id'] == '2') {
+                        // IVA 10.5%
+                        $neto = round($total / 1.105, 2);
+                        $input['iva10'] += $neto;
+                    } elseif ($product['tax_id'] == '3') {
+                        // IVA 27%
+                        $neto = round($total / 1.27, 2);
+                        $input['iva27'] += $neto;
                     }
                 }
 
+
+
+
                 if ($input['discount_amount'] != '0.00' &&  $input['discount_type'] == 'percentage') {
-
-                    $input['iva21']  = $input['iva21'] - ($input['iva21'] * $input['discount_amount'] / 100);
-                    $input['iva10']  = $input['iva10'] - ($input['iva10'] * $input['discount_amount'] / 100);
-                    $input['iva27']  = $input['iva27'] - ($input['iva27'] * $input['discount_amount'] / 100);
-                } else if ($input['discount_amount'] != '0.00' &&  $input['discount_type'] == 'fixed') {
-
+                    $input['iva21'] -= ($input['iva21'] * $input['discount_amount'] / 100);
+                    $input['iva10'] -= ($input['iva10'] * $input['discount_amount'] / 100);
+                    $input['iva27'] -= ($input['iva27'] * $input['discount_amount'] / 100);
+                } elseif ($input['discount_amount'] != '0.00' &&  $input['discount_type'] == 'fixed') {
                     $discount = ($input['discount_amount'] * 100) / $input['price_total'];
-                    $input['iva21']  = $input['iva21'] - ($input['iva21'] * $discount / 100);
-                    $input['iva10']  = $input['iva10'] - ($input['iva10'] * $discount / 100);
-                    $input['iva27']  = $input['iva27'] - ($input['iva27'] * $discount / 100);
+                    $input['iva21'] -= ($input['iva21'] * $discount / 100);
+                    $input['iva10'] -= ($input['iva10'] * $discount / 100);
+                    $input['iva27'] -= ($input['iva27'] * $discount / 100);
                 }
 
+
                 $transaction = $this->transactionUtil->updateSellTransaction($id, $business_id, $input, $invoice_total, $user_id);
+
+                if ($input['payment'][0]['method_cheque'] === 'cheque') {
+                    DB::table('cheques')->insert([
+                        'number' => $request->payment[0]['cheque_number'],
+                        'bank' => $request->payment[0]['cheque_bank'],
+                        'issue_date' => $request->payment[0]['cheque_issue_date'],
+                        'type' => $request->payment[0]['cheque_type'],
+                        'deferral_date' => $request->payment[0]['cheque_deferral_date'],
+                        'direction' => 'recibido',
+                        'amount' => $request->payment[0]['cheque_amount'],
+                        'business_id' => $business_id,
+                        'transaction_id' => $transaction->id,
+                        'payment_for' => $transaction->contact_id,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                };
+
 
                 //Update Sell lines
                 $deleted_lines = $this->transactionUtil->createOrUpdateSellLines($transaction, $input['products'], $input['location_id'], true, $status_before);
@@ -1130,7 +1203,7 @@ class SellPosController extends Controller
                     $agent = $this->deliveryUtil->getAgent($id);
                     $this->deliveryUtil->reformDeliveryDetails(Delivery::where('transaction_id', $id)->first());
                 }
-                
+
                 //Update update lines
                 /*
                 if (!$is_direct_sale && !$transaction->is_suspend) {
@@ -1156,7 +1229,7 @@ class SellPosController extends Controller
                     $change_return['amount'] = $input['change_return'];
                     $change_return['is_return'] = 1;
                     //$input['payment'][] = $change_return;
-                    if ($input['payment'][0]['method_cash'] == '1' or $input['payment'][0]['method_card'] == 'card') {
+                    if ($input['payment'][0]['method_cash'] == '1' or $input['payment'][0]['method_card'] == 'card' or $input['payment'][0]['method_cheque'] == 'cheque') {
                         $input['payment'][0]['amount'] = $input['final_total'];
                     }
                 }
@@ -1395,7 +1468,7 @@ class SellPosController extends Controller
             $product = $this->productUtil->getDetailsFromVariation($variation_id, $business_id, $location_id);
 
 
-            
+
             $product->formatted_qty_available = $this->productUtil->num_f($product->qty_available, false, null, true);
 
 
@@ -1519,35 +1592,39 @@ class SellPosController extends Controller
         $transaction_status = $request->get('status');
 
         $register = $this->cashRegisterUtil->getCurrentCashRegister($user_id);
+        $register_id = !empty($register->id) ? $register->id : null;
 
-        $query = Transaction::where('business_id', $business_id)
-            ->where('transactions.created_by', $user_id)
-            ->where('transactions.type', 'sell')
-            ->where('is_direct_sale', 0);
+        $cacheKey = "recent_transactions_{$business_id}_{$user_id}_{$transaction_status}_{$register_id}";
+        $transactions = Cache::remember($cacheKey, 54000, function () use ($business_id, $user_id, $transaction_status, $register) {
+            $query = Transaction::where('business_id', $business_id)
+                ->where('transactions.created_by', $user_id)
+                ->where('transactions.type', 'sell')
+                ->where('is_direct_sale', 0);
 
-        if ($transaction_status == 'final') {
-            if (!empty($register->id)) {
-                $query->leftjoin('cash_register_transactions as crt', 'transactions.id', '=', 'crt.transaction_id')
-                    ->where('crt.cash_register_id', $register->id);
+            if ($transaction_status == 'final') {
+                if (!empty($register->id)) {
+                    $query->leftjoin('cash_register_transactions as crt', 'transactions.id', '=', 'crt.transaction_id')
+                        ->where('crt.cash_register_id', $register->id);
+                }
             }
-        }
 
-        if ($transaction_status == 'quotation') {
-            $query->where('transactions.status', 'draft')
-                ->where('is_quotation', 1);
-        } elseif ($transaction_status == 'draft') {
-            $query->where('transactions.status', 'draft')
-                ->where('is_quotation', 0);
-        } else {
-            $query->where('transactions.status', $transaction_status);
-        }
+            if ($transaction_status == 'quotation') {
+                $query->where('transactions.status', 'draft')
+                    ->where('is_quotation', 1);
+            } elseif ($transaction_status == 'draft') {
+                $query->where('transactions.status', 'draft')
+                    ->where('is_quotation', 0);
+            } else {
+                $query->where('transactions.status', $transaction_status);
+            }
 
-        $transactions = $query->orderBy('transactions.created_at', 'desc')
-            ->groupBy('transactions.id')
-            ->select('transactions.*')
-            ->with(['contact'])
-            ->limit(10)
-            ->get();
+            return $query->orderBy('transactions.created_at', 'desc')
+                ->groupBy('transactions.id')
+                ->select('transactions.*')
+                ->with(['contact'])
+                ->limit(10)
+                ->get();
+        });
 
         return view('sale_pos.partials.recent_transactions')
             ->with(compact('transactions'));
@@ -1586,7 +1663,7 @@ class SellPosController extends Controller
 
                 $is_package_slip = !empty($request->input('package_slip')) ? true : false;
 
-                $receipt = $this->receiptContent($business_id, $transaction->location_id, $transaction_id, null,$printer_type, $is_package_slip, false);
+                $receipt = $this->receiptContent($business_id, $transaction->location_id, $transaction_id, null, $printer_type, $is_package_slip, false);
 
                 if (!empty($receipt)) {
                     $output = ['success' => 1, 'receipt' => $receipt];
@@ -1620,73 +1697,71 @@ class SellPosController extends Controller
 
             $check_qty = false;
             $business_id = $request->session()->get('user.business_id');
+            $page = $request->get('page', 1);
 
-            $products = Product::join(
-                'variations',
-                'products.id',
-                '=',
-                'variations.product_id'
-            )
-                ->leftJoin(
-                    'variation_location_details AS VLD',
-                    function ($join) use ($location_id) {
-                        $join->on('variations.id', '=', 'VLD.variation_id');
-
-                        //Include Location
-                        if (!empty($location_id)) {
-                            $join->where(function ($query) use ($location_id) {
-                                $query->where('VLD.location_id', '=', $location_id);
-                                //Check null to show products even if no quantity is available in a location.
-                                //TODO: Maybe add a settings to show product not available at a location or not.
-                                $query->orWhereNull('VLD.location_id');
-                            });;
-                        }
-                    }
+            $products = Cache::remember("product_suggestions_{$page}_{$business_id}_{$location_id}_{$category_id}_{$brand_id}_{$term}", 54000, function () use ($business_id, $location_id, $category_id, $brand_id, $term) {
+                $query = Product::join(
+                    'variations',
+                    'products.id',
+                    '=',
+                    'variations.product_id'
                 )
-                ->active()
-                ->where('products.business_id', $business_id)
-                ->where('products.type', '!=', 'modifier');
+                    ->leftJoin(
+                        'variation_location_details AS VLD',
+                        function ($join) use ($location_id) {
+                            $join->on('variations.id', '=', 'VLD.variation_id');
 
-            //Include search
-            if (!empty($term)) {
-                $products->where(function ($query) use ($term) {
-                    $query->where('products.name', 'like', '%' . $term . '%');
-                    $query->orWhere('sku', 'like', '%' . $term . '%');
-                    $query->orWhere('sub_sku', 'like', '%' . $term . '%');
-                });
-            }
+                            //Include Location
+                            if (!empty($location_id)) {
+                                $join->where(function ($query) use ($location_id) {
+                                    $query->where('VLD.location_id', '=', $location_id);
+                                    //Check null to show products even if no quantity is available in a location.
+                                    //TODO: Maybe add a settings to show product not available at a location or not.
+                                    $query->orWhereNull('VLD.location_id');
+                                });
+                            }
+                        }
+                    )
+                    ->active()
+                    ->where('products.business_id', $business_id)
+                    ->where('products.type', '!=', 'modifier');
 
-            //Include check for quantity
-            /* if ($check_qty) {
-                $products->where('VLD.qty_available', '>', 0);
-            } */
+                //Include search
+                if (!empty($term)) {
+                    $query->where(function ($query) use ($term) {
+                        $query->where('products.name', 'like', '%' . $term . '%');
+                        $query->orWhere('sku', 'like', '%' . $term . '%');
+                        $query->orWhere('sub_sku', 'like', '%' . $term . '%');
+                    });
+                }
 
-            if ($category_id != 'all') {
-                $products->where(function ($query) use ($category_id) {
-                    $query->where('products.category_id', $category_id);
-                    $query->orWhere('products.sub_category_id', $category_id);
-                });
-            }
-            if ($brand_id != 'all') {
-                $products->where('products.brand_id', $brand_id);
-            }
+                if ($category_id != 'all') {
+                    $query->where(function ($query) use ($category_id) {
+                        $query->where('products.category_id', $category_id);
+                        $query->orWhere('products.sub_category_id', $category_id);
+                    });
+                }
+                if ($brand_id != 'all') {
+                    $query->where('products.brand_id', $brand_id);
+                }
 
-            $products = $products->select(
-                'products.id as product_id',
-                'products.name',
-                'products.type',
-                'products.enable_stock',
-                'variations.id as variation_id',
-                'variations.name as variation',
-                'VLD.qty_available',
-                'VLD.location_id',
-                'variations.default_sell_price as selling_price',
-                'variations.sub_sku',
-                'products.image'
-            )
-                ->orderBy('products.name', 'asc')
-                ->groupBy('variations.id')
-                ->paginate(20);
+                return $query->select(
+                    'products.id as product_id',
+                    'products.name',
+                    'products.type',
+                    'products.enable_stock',
+                    'variations.id as variation_id',
+                    'variations.name as variation',
+                    'VLD.qty_available',
+                    'VLD.location_id',
+                    'variations.default_sell_price as selling_price',
+                    'variations.sub_sku',
+                    'products.image'
+                )
+                    ->orderBy('products.name', 'asc')
+                    ->groupBy('variations.id')
+                    ->paginate(20);
+            });
 
             return view('sale_pos.partials.product_list')
                 ->with(compact('products'));
@@ -2025,7 +2100,7 @@ class SellPosController extends Controller
         $certPath = base_path($business_locations->url_cert);
         $keyPath = base_path($business_locations->url_key);
 
-        $options = [                   
+        $options = [
             'CUIT' => $cuit,
             'production' => True,
             'cert' => $certPath,
@@ -2304,9 +2379,36 @@ class SellPosController extends Controller
         $sell->afip_invoice_date = $date2;
         $sell->exp_cae = $vtocae;
         $num_fac = $last_voucher + 1;
+
+        // Formatear el número de factura de AFIP
         $sell->num_invoice_afip = str_pad($punto_venta, 4, "0", STR_PAD_LEFT) . '-' . str_pad($num_fac, 8, "0", STR_PAD_LEFT);
-        $data = '{"ver":1,"fecha":' . $dateqr . ',"cuit":' . $cuit . ',"ptoVta":' . $punto_venta . ',"tipoCmp":' . $CbteTipo . ',"nroCmp":' . $num_fac . ',"importe":' . $ImpTotal . ',"moneda":"PES","ctz":1,"tipoDocRec":' . $doctipo . ',"nroDocRec":' . $sell->contact->tax_number . ',"tipoCodAut":"E","codAut":' . $cae . '}';
-        $data64 = "https://www.afip.gob.ar/fe/qr/?p=" . base64_encode($data);
+
+
+        // Preparar los datos para el QR
+        $data = [
+            'ver' => 1,  // Versión del formato QR
+            'fecha' => $dateqr,  // Fecha de emisión de la factura
+            'cuit' => (int)$cuit,  // CUIT del emisor
+            'ptoVta' => (int)$punto_venta,  // Punto de venta
+            'tipoCmp' => (int)$CbteTipo,  // Tipo de comprobante (Factura, Nota de Crédito, etc.)
+            'nroCmp' => (int)$num_fac,  // Número de comprobante
+            'importe' => (float)$ImpTotal,  // Importe total
+            'moneda' => 'PES',  // Moneda (Pesos)
+            'ctz' => 1,  // Cotización (normalmente es 1 para pesos)
+            'tipoDocRec' => (int)$doctipo,  // Tipo de documento del receptor (DNI, CUIT, etc.)
+            'nroDocRec' => (int)$sell->contact->tax_number,  // Número de documento del receptor (si es numérico)
+            'tipoCodAut' => 'E',  // Tipo de código de autorización ('E' para CAE)
+            'codAut' => (int)$cae  // CAE (Código de Autorización Electrónico)
+        ];
+
+
+        // Convertir el array a JSON
+        $dataJson = json_encode($data);
+
+        // Codificar en base64
+        $data64 = "https://www.afip.gob.ar/fe/qr/?p=" . base64_encode($dataJson);
+
+        // Asignar el código QR a la factura
         $sell->qrCode = $data64;
         $sell->type_invoice = $letra;
 
@@ -2407,5 +2509,40 @@ class SellPosController extends Controller
             'factura' => $factura,
 
         ]);
+    }
+
+    public function updateCheckState(Request $request)
+    {
+        try {
+            $id = $request->input('id');
+            $state = $request->input('state');
+
+            // Obtener el cheque
+            $cheque = DB::table('cheques')->where('id', $id)->first();
+
+            if (!$cheque) {
+                return response()->json(['success' => false, 'message' => 'Cheque no encontrado.'], 404);
+            }
+
+            // Actualizar el estado del cheque
+            DB::table('cheques')
+                ->where('id', $id)
+                ->update(['state' => $state]);
+
+            // Si el estado es "rechazado", actualizar el monto en los pagos relacionados
+            if ($state === 'rechazado') {
+                // Ajustar el pago relacionado en transaction_payments
+                if ($state === 'rechazado') {
+                    // Ajustar el pago relacionado en transaction_payments
+                    DB::table('transaction_payments')
+                        ->where('id', $cheque->transaction_id) // ID del pago relacionado
+                        ->update(['amount' => DB::raw("amount - $cheque->amount")]);
+                }
+            }
+
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
     }
 }

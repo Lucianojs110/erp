@@ -976,16 +976,17 @@ function update_table_sr_number() {
         });
 }
 
-$(document).on('click', 'button#submit_purchase_form', function(e) {
+$(document).on('click', 'button#submit_purchase_form', function (e) {
     e.preventDefault();
 
-    //Check if product is present or not.
+    // Verificar si hay productos en la tabla de compras
     if ($('table#purchase_entry_table tbody tr').length <= 0) {
         toastr.warning(LANG.no_products_added);
         $('input#search_product').select();
         return false;
     }
 
+    // Validar el formulario de compra
     $('form#add_purchase_form').validate({
         rules: {
             ref_no: {
@@ -993,13 +994,13 @@ $(document).on('click', 'button#submit_purchase_form', function(e) {
                     url: '/purchases/check_ref_number',
                     type: 'post',
                     data: {
-                        ref_no: function() {
+                        ref_no: function () {
                             return $('#ref_no').val();
                         },
-                        contact_id: function() {
+                        contact_id: function () {
                             return $('#supplier_id').val();
                         },
-                        purchase_id: function() {
+                        purchase_id: function () {
                             if ($('#purchase_id').length > 0) {
                                 return $('#purchase_id').val();
                             } else {
@@ -1017,7 +1018,21 @@ $(document).on('click', 'button#submit_purchase_form', function(e) {
         },
     });
 
+    // Si el formulario es válido
     if ($('form#add_purchase_form').valid()) {
+        // Si el método de pago seleccionado es cheque, transferir los detalles a los inputs ocultos
+        if ($('select#payment_method').val() === 'cheque') {
+            $('input#cheque_number_0').val($('#cheque_number').val());
+            $('input#cheque_bank_0').val($('#cheque_bank').val());
+            $('select#cheque_type_0').val($('#cheque_type').val());
+            $('input#cheque_issue_date_0').val($('#cheque_issue_date').val());
+            $('input#cheque_deferral_date_0').val($('#cheque_deferral_date').val());
+            $('input#cheque_amount_0').val($('#cheque_amount').val());
+            $('input#method_cheque_0').val('cheque');
+        }
+
+        // Enviar el formulario
         $('form#add_purchase_form').submit();
     }
 });
+

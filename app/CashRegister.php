@@ -3,8 +3,7 @@
 namespace App;
 
 use Illuminate\Database\Eloquent\Model;
-use DB;
-
+use Illuminate\Support\Facades\DB;
 class CashRegister extends Model
 {
     /**
@@ -26,11 +25,13 @@ class CashRegister extends Model
     {
         // concatenate created_at and closed_at columns in one string, pluck it with 'id'
         // and 'name' columns, and return it as an array
-        return self::where('business_id', $business_id)
+        return cache()->remember("cash_registers_for_dropdown_{$business_id}", 54000, function() use ($business_id) {
+            return self::where('business_id', $business_id)
             ->select(
                 DB::raw("CONCAT(DATE_FORMAT(created_at, '%d/%m/%Y %H:%i'), ' - ', IFNULL(closed_at, 'Abierta')) as name"),
                 'id'
             )
             ->pluck('name', 'id');
+        });
     }
 }

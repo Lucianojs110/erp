@@ -311,13 +311,13 @@
 							{{$line['quantity']}} {{$line['units']}}
 						</td>
 						<td class="text-right">
-							{{$line['unit_price_before_discount']}}
+							{{$line['unit_price_exc_tax']}}
 						</td>
 						<td class="text-right">
 							{{$line['line_discount']}}
 						</td>
 						<td class="text-right">
-							{{$line['tax']}} {{$line['tax_name']}}
+							{{$line['unit_price_inc_tax'] - $line['unit_price_exc_tax'] }} {{$line['tax_name']}}
 						</td>
 						<td class="text-right">
 							{{$line['unit_price_inc_tax']}}

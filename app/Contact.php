@@ -7,7 +7,8 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Notifications\Notifiable;
 
-use DB;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class Contact extends Authenticatable
 {
@@ -28,6 +29,11 @@ class Contact extends Authenticatable
      * @var array
      */
     protected $dates = ['deleted_at'];
+
+    public function bankDetails()
+    {
+        return $this->hasMany(BankDetails::class,'contacts_id');
+    }
 
     public function scopeOnlySuppliers($query)
     {
@@ -50,6 +56,8 @@ class Contact extends Authenticatable
      */
     public static function contactDropdown($business_id, $exclude_default = false, $prepend_none = true, $append_id = true)
     {
+        $cacheKey = "contactDropdown_{$business_id}_{$exclude_default}_{$prepend_none}_{$append_id}";
+        return Cache::remember($cacheKey, 54000, function () use ($business_id, $exclude_default, $prepend_none, $append_id) {
         $query = Contact::where('business_id', $business_id);
         if ($exclude_default) {
             $query->where('is_default', 0);
@@ -74,7 +82,7 @@ class Contact extends Authenticatable
             $contacts = $contacts->prepend(__('lang_v1.none'), '');
         }
 
-        return $contacts;
+        return $contacts; });
     }
 
     /**
@@ -122,25 +130,28 @@ class Contact extends Authenticatable
      */
     public static function customersDropdown($business_id, $prepend_none = true, $append_id = true)
     {
-        $all_contacts = Contact::where('business_id', $business_id)
-                        ->whereIn('type', ['customer', 'both']);
+        $cacheKey = "customersDropdown_{$business_id}_{$prepend_none}_{$append_id}";
+        return Cache::remember($cacheKey, 54000, function () use ($business_id, $prepend_none, $append_id) {
+            $all_contacts = Contact::where('business_id', $business_id)
+                    ->whereIn('type', ['customer', 'both']);
 
-        if ($append_id) {
+            if ($append_id) {
             $all_contacts->select(
                 DB::raw("IF(contact_id IS NULL OR contact_id='', name, CONCAT(name, ' (', contact_id, ')')) AS customer"),
                 'id'
-                );
-        } else {
+            );
+            } else {
             $all_contacts->select('id', DB::raw("name as customer"));
-        }
+            }
 
-        $customers = $all_contacts->pluck('customer', 'id');
+            $customers = $all_contacts->pluck('customer', 'id');
 
-        //Prepend none
-        if ($prepend_none) {
+            //Prepend none
+            if ($prepend_none) {
             $customers = $customers->prepend(__('lang_v1.none'), '');
-        }
+            }
 
-        return $customers;
+            return $customers;
+        });
     }
 }

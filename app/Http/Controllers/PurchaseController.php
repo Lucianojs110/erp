@@ -48,7 +48,7 @@ class PurchaseController extends Controller
         $this->businessUtil = $businessUtil;
         $this->moduleUtil = $moduleUtil;
 
-        $this->dummyPaymentLine = ['method' => 'cash', 'amount' => 0, 'note' => '', 'card_transaction_number' => '', 'card_number' => '', 'card_type' => '', 'card_holder_name' => '', 'card_month' => '', 'card_year' => '', 'card_security' => '', 'cheque_number' => '', 'bank_account_number' => '',
+        $this->dummyPaymentLine = ['method' => 'cash', 'amount' => 0, 'note' => '', 'card_transaction_number' => '', 'card_number' => '', 'card_type' => '', 'card_holder_name' => '', 'card_month' => '', 'card_year' => '', 'card_security' => '', 'cheque_number' => '', 'cheque_bank' => '', 'cheque_type' => '', 'cheque_issue_date' => '', 'cheque_deferral_date' => '', 'cheque_amount' => '', 'bank_account_number' => '',
         'is_return' => 0, 'transaction_no' => ''];
     }
 
@@ -396,6 +396,40 @@ class PurchaseController extends Controller
 
                 $transaction->final_total = ($category == 1) ? $transaction->final_total + $adder : $transaction->final_total - $adder;
                 $transaction->save();
+            }
+            if ($request['payment'][0]['method'] === 'cheque') {
+                // Verificar si el número de cheque ya existe
+                $existing_cheque = DB::table('cheques')
+                    ->where('number', $request->payment[0]['cheque_number'])
+                    ->first();
+            
+                if ($existing_cheque) {
+                    // Si el cheque existe, actualizar su estado y dirección
+                    DB::table('cheques')
+                        ->where('id', $existing_cheque->id)
+                        ->update([
+                            'direction' => 'emitido',
+                            'state' => 'endosado',
+                            'updated_at' => now(),
+                        ]);
+                } else {
+                    // Si no existe, crear una nueva entrada
+                    DB::table('cheques')->insert([
+                        'number' => $request->payment[0]['cheque_number'],
+                        'bank' => $request->payment[0]['cheque_bank'],
+                        'issue_date' => $request->payment[0]['cheque_issue_date'],
+                        'type' => $request->payment[0]['cheque_type'],
+                        'deferral_date' => $request->payment[0]['cheque_deferral_date'],
+                        'direction' => 'emitido',
+                        'state' => 'endosado',
+                        'amount' => $request->payment[0]['cheque_amount'],
+                        'business_id' => $business_id,
+                        'transaction_id' => $transaction->id,
+                        'payment_for' => $transaction->contact_id,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
             }
             
             $purchase_lines = [];

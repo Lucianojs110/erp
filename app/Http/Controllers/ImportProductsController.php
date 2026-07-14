@@ -50,9 +50,10 @@ class ImportProductsController extends Controller
 
         //Check if zip extension it loaded or not.
         if ($zip_loaded === false) {
-            $output = ['success' => 0,
-                            'msg' => 'Please install/enable PHP Zip archive for import'
-                        ];
+            $output = [
+                'success' => 0,
+                'msg' => 'Please install/enable PHP Zip archive for import'
+            ];
 
             return view('import_products.index')
                 ->with('notification', $output);
@@ -74,34 +75,159 @@ class ImportProductsController extends Controller
         }
 
         $request->validate([
-            'products_csv' => [ 'required' ],
+            'products_csv' => [
+                'required',
+                'file',
+                'mimes:csv,txt,xlsx,xls',
+                'max:10240',
+            ],
+        ], [
+            'products_csv.required' =>
+            'Debe seleccionar un archivo.',
+
+            'products_csv.file' =>
+            'El archivo seleccionado no es válido.',
+
+            'products_csv.mimes' =>
+            'El archivo debe ser CSV o Excel.',
+
+            'products_csv.max' =>
+            'El archivo no puede superar los 10 MB.',
         ]);
 
+        $fullPath = null;
+
         try {
-            //Set maximum php execution time
+            $file = $request->file('products_csv');
+
+            if (!$file || !$file->isValid()) {
+                throw new \Exception(
+                    'El archivo no se recibió correctamente.'
+                );
+            }
+
+            /*
+         * Crea una carpeta temporal dentro de storage.
+         */
+            $directory = storage_path('app/imports');
+
+            if (!is_dir($directory)) {
+                mkdir($directory, 0775, true);
+            }
+
+            /*
+         * Conserva la extensión real.
+         */
+            $extension = strtolower(
+                $file->getClientOriginalExtension()
+            );
+
+            if (empty($extension)) {
+                $extension = 'csv';
+            }
+
+            $filename =
+                'products_' .
+                date('Ymd_His') .
+                '_' .
+                uniqid() .
+                '.' .
+                $extension;
+
+            /*
+         * Mueve el archivo fuera del temporal de PHP.
+         */
+            $file->move(
+                $directory,
+                $filename
+            );
+
+            $fullPath =
+                $directory .
+                DIRECTORY_SEPARATOR .
+                $filename;
+
+            if (!file_exists($fullPath)) {
+                throw new \Exception(
+                    'El archivo no pudo guardarse temporalmente.'
+                );
+            }
+
+            if (!is_readable($fullPath)) {
+                throw new \Exception(
+                    'El archivo temporal no tiene permisos de lectura.'
+                );
+            }
+
             ini_set('max_execution_time', 0);
+
             DB::beginTransaction();
-            
-            Excel::import(new ProductImport, $request->file('products_csv'));
-            
+
+            /*
+         * Fuerza el lector según la extensión.
+         */
+            if ($extension === 'xlsx') {
+                $readerType =
+                    \Maatwebsite\Excel\Excel::XLSX;
+            } elseif ($extension === 'xls') {
+                $readerType =
+                    \Maatwebsite\Excel\Excel::XLS;
+            } else {
+                $readerType =
+                    \Maatwebsite\Excel\Excel::CSV;
+            }
+
+            /*
+         * Se pasa una ruta física, nunca el UploadedFile.
+         */
+            Excel::import(
+                new ProductImport(),
+                $fullPath,
+                null,
+                $readerType
+            );
+
             DB::commit();
 
-            $output = [ 'success' => 1, 'msg' => __('product.file_imported_successfully') ];
+            $output = [
+                'success' => 1,
+                'msg' => __(
+                    'product.file_imported_successfully'
+                ),
+            ];
 
-        } catch (\Exception $e) {
-            DB::rollBack();
-            //dd($e);
-            \Log::emergency("File:" . $e->getFile(). "Line:" . $e->getLine(). "Message:" . $e->getMessage());
+            return redirect('import-products')
+                ->with('status', $output);
+        } catch (\Throwable $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
 
-            $output = ['success' => 0,
-                            'msg' => $e->getMessage()
-                        ];
-            return redirect('import-products')->with('notification', $output);
+            \Log::emergency(
+                'File: ' . $e->getFile() .
+                    ' Line: ' . $e->getLine() .
+                    ' Message: ' . $e->getMessage()
+            );
+
+            $output = [
+                'success' => 0,
+                'msg' => $e->getMessage(),
+            ];
+
+            return redirect('import-products')
+                ->with('notification', $output);
+        } finally {
+            /*
+         * Borra el archivo temporal al terminar.
+         */
+            if (
+                !empty($fullPath) &&
+                file_exists($fullPath)
+            ) {
+                unlink($fullPath);
+            }
         }
-
-        return redirect('import-products')->with('status', $output);
     }
-
     private function calculateVariationPrices($dpp_exc_tax, $dpp_inc_tax, $selling_price, $tax_amount, $tax_type, $margin)
     {
 
@@ -176,17 +302,17 @@ class ImportProductsController extends Controller
         //Add opening stock transaction
         $transaction = Transaction::create(
             [
-                                'type' => 'opening_stock',
-                                'opening_stock_product_id' => $product->id,
-                                'status' => 'received',
-                                'business_id' => $business_id,
-                                'transaction_date' => $transaction_date,
-                                'total_before_tax' => $total_before_tax,
-                                'location_id' => $opening_stock['location_id'],
-                                'final_total' => $total_before_tax,
-                                'payment_status' => 'paid',
-                                'created_by' => $user_id
-                            ]
+                'type' => 'opening_stock',
+                'opening_stock_product_id' => $product->id,
+                'status' => 'received',
+                'business_id' => $business_id,
+                'transaction_date' => $transaction_date,
+                'total_before_tax' => $total_before_tax,
+                'location_id' => $opening_stock['location_id'],
+                'final_total' => $total_before_tax,
+                'payment_status' => 'paid',
+                'created_by' => $user_id
+            ]
         );
         //Get product tax
         $tax_percent = !empty($product->product_tax->amount) ? $product->product_tax->amount : 0;
@@ -196,16 +322,16 @@ class ImportProductsController extends Controller
 
         //Create purchase line
         $transaction->purchase_lines()->create([
-                        'product_id' => $product->id,
-                        'variation_id' => $variation->id,
-                        'quantity' => $opening_stock['quantity'],
-                        'item_tax' => $item_tax,
-                        'tax_id' => $tax_id,
-                        'pp_without_discount' => $variation->default_purchase_price,
-                        'purchase_price' => $variation->default_purchase_price,
-                        'purchase_price_inc_tax' => $variation->dpp_inc_tax,
-                        'exp_date' => !empty($opening_stock['exp_date']) ? $opening_stock['exp_date'] : null
-                    ]);
+            'product_id' => $product->id,
+            'variation_id' => $variation->id,
+            'quantity' => $opening_stock['quantity'],
+            'item_tax' => $item_tax,
+            'tax_id' => $tax_id,
+            'pp_without_discount' => $variation->default_purchase_price,
+            'purchase_price' => $variation->default_purchase_price,
+            'purchase_price_inc_tax' => $variation->dpp_inc_tax,
+            'exp_date' => !empty($opening_stock['exp_date']) ? $opening_stock['exp_date'] : null
+        ]);
         //Update variation location details
         $this->productUtil->updateProductQuantity($opening_stock['location_id'], $product->id, $variation->id, $opening_stock['quantity']);
     }
@@ -224,24 +350,24 @@ class ImportProductsController extends Controller
             //Add opening stock transaction
             $transaction = Transaction::create(
                 [
-                                'type' => 'opening_stock',
-                                'opening_stock_product_id' => $product->id,
-                                'status' => 'received',
-                                'business_id' => $business_id,
-                                'transaction_date' => $transaction_date,
-                                'total_before_tax' => $total_before_tax,
-                                'location_id' => $location_id,
-                                'final_total' => $total_before_tax,
-                                'payment_status' => 'paid',
-                                'created_by' => $user_id
-                            ]
+                    'type' => 'opening_stock',
+                    'opening_stock_product_id' => $product->id,
+                    'status' => 'received',
+                    'business_id' => $business_id,
+                    'transaction_date' => $transaction_date,
+                    'total_before_tax' => $total_before_tax,
+                    'location_id' => $location_id,
+                    'final_total' => $total_before_tax,
+                    'payment_status' => 'paid',
+                    'created_by' => $user_id
+                ]
             );
 
             foreach ($variations['variations'] as $variation_os) {
                 if (!empty($variation_os['opening_stock'])) {
                     $variation = Variation::where('product_id', $product->id)
-                                    ->where('name', $variation_os['value'])
-                                    ->first();
+                        ->where('name', $variation_os['value'])
+                        ->first();
                     if (!empty($variation)) {
                         $opening_stock = [
                             'quantity' => $variation_os['opening_stock'],
@@ -259,15 +385,15 @@ class ImportProductsController extends Controller
 
                     //Create purchase line
                     $transaction->purchase_lines()->create([
-                                    'product_id' => $product->id,
-                                    'variation_id' => $variation->id,
-                                    'quantity' => $opening_stock['quantity'],
-                                    'item_tax' => $item_tax,
-                                    'tax_id' => $tax_id,
-                                    'purchase_price' => $variation->default_purchase_price,
-                                    'purchase_price_inc_tax' => $variation->dpp_inc_tax,
-                                    'exp_date' => !empty($opening_stock['exp_date']) ? $opening_stock['exp_date'] : null
-                                ]);
+                        'product_id' => $product->id,
+                        'variation_id' => $variation->id,
+                        'quantity' => $opening_stock['quantity'],
+                        'item_tax' => $item_tax,
+                        'tax_id' => $tax_id,
+                        'purchase_price' => $variation->default_purchase_price,
+                        'purchase_price_inc_tax' => $variation->dpp_inc_tax,
+                        'exp_date' => !empty($opening_stock['exp_date']) ? $opening_stock['exp_date'] : null
+                    ]);
                     //Update variation location details
                     $this->productUtil->updateProductQuantity($location_id, $product->id, $variation->id, $opening_stock['quantity']);
                 }

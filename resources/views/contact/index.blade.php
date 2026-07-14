@@ -47,6 +47,7 @@
                                 <th>@lang('business.address')</th>
                                 <th>@lang('contact.contact')</th>
                                 <th>@lang('contact.total_sale_due')</th>
+                                
                                 <th>@lang('lang_v1.total_sell_return_due')</th>
                                 <th>@lang('messages.action')</th>
                             @endif

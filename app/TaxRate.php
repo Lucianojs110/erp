@@ -31,31 +31,34 @@ class TaxRate extends Model
      *
      * @return array['tax_rates', 'attributes']
      */
-    public static function forBusinessDropdown(
-        $business_id,
-        $prepend_none = true,
-        $include_attributes = false
-    ) {
-        $all_taxes = TaxRate::where('business_id', $business_id);
-        $result = $all_taxes->get();
-        $tax_rates = $result->pluck('name', 'id');
+  public static function forBusinessDropdown(
+    $business_id,
+    $prepend_none = true,
+    $include_attributes = false
+) {
+    // Obtener las tasas de impuestos directamente desde la base de datos sin caché
+    $all_taxes = TaxRate::where('business_id', $business_id)->get();
 
-        //Prepend none
-        if ($prepend_none) {
-            $tax_rates = $tax_rates->prepend(__('lang_v1.none'), '');
-        }
+    // Pluck de los nombres de los impuestos y sus ids
+    $tax_rates = $all_taxes->pluck('name', 'id');
 
-        //Add tax attributes
-        $tax_attributes = null;
-        if ($include_attributes) {
-            $tax_attributes = collect($result)->mapWithKeys(function ($item) {
-                return [$item->id => ['data-rate' => $item->amount]];
-            })->all();
-        }
-
-        $output = ['tax_rates' => $tax_rates, 'attributes' => $tax_attributes];
-        return $output;
+    // Prepend none
+    if ($prepend_none) {
+        $tax_rates = $tax_rates->prepend(__('lang_v1.none'), '');
     }
+
+    // Añadir atributos de impuestos
+    $tax_attributes = null;
+    if ($include_attributes) {
+        $tax_attributes = collect($all_taxes)->mapWithKeys(function ($item) {
+            return [$item->id => ['data-rate' => $item->amount]];  // Usando la tasa de impuesto (amount)
+        })->all();
+    }
+
+    // Devolver los resultados
+    $output = ['tax_rates' => $tax_rates, 'attributes' => $tax_attributes];
+    return $output;
+}
 
     /**
      * Return list of tax rate for a business

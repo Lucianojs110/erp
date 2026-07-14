@@ -2,6 +2,7 @@
   <div class="modal-content">
 
     {!! Form::open(['url' => action('TransactionPaymentController@update', [$payment_line->id]), 'method' => 'put', 'id' => 'transaction_payment_add_form', 'files' => true ]) !!}
+    {!! Form::hidden('transaction_id', $transaction->id); !!}
 
     <div class="modal-header">
       <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>

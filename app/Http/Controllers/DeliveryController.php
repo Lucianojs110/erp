@@ -75,6 +75,8 @@ class DeliveryController extends Controller
 
                         @if(empty($tcae))
                             <a href="{{action(\'SellController@afipInvoice\', [$transaction_id])}}" class="btn btn-xs btn-info"><i class="glyphicon  glyphicon-ok-sign"></i>Facturar Venta</a>
+                        @else
+                            <a href="{{action(\'SellController@afipInvoice\', [$transaction_id])}}" class="btn btn-xs btn-info"><i class="glyphicon glyphicon-eye-open"></i>Ver factura</a>
                         @endif
                     '
                 )

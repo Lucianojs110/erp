@@ -244,7 +244,7 @@
               <th>@lang('purchase.amount')</th>
               <th>@lang('purchase.payment_method')</th>
               <th>@lang('purchase.payment_note')</th>
-              @if($accounts_enabled)
+              @if($accounts_enabled && !empty($payment->payment_account))
                 <th>@lang('lang_v1.payment_account')</th>
               @endif
               <th class="no-print">@lang('messages.actions')</th>
@@ -256,7 +256,7 @@
                   <td><span class="display_currency" data-currency_symbol="true">{{ $payment->amount }}</span></td>
                   <td>{{ $payment_types[$payment->method] }}</td>
                   <td>{{ $payment->note }}</td>
-                  @if($accounts_enabled)
+                  @if($accounts_enabled && !empty($payment->payment_account))
                     <td>{{$payment->payment_account->name or ''}}</td>
                   @endif
                   <td class="no-print" style="display: flex;">
