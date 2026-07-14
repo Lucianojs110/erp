@@ -380,7 +380,7 @@
     </div>
     <footer>
   
-  <img src="{{URL::asset('/img/logo.jpg')}}" alt="profile Pic" height="80" width="180">
+ 
 </footer>
 </div>
 
