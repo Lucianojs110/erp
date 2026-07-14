@@ -81,6 +81,8 @@ class ProductController extends Controller
                     'products.id',
                     'products.name as product',
                     'products.type',
+                    'products.manages_packages',
+                    'products.weight',
                     'c1.name as category',
                     'c2.name as sub_category',
                     'units.actual_name as unit',
@@ -185,7 +187,56 @@ class ProductController extends Controller
                 ->addColumn('mass_delete', function ($row) {
                     return  '<input type="checkbox" class="row-select" value="' . $row->id . '">';
                 })
-                ->editColumn('current_stock', '@if($enable_stock == 1 and $type != "variable") {{@number_format($current_stock)}} @else -- @endif {{$unit}}')
+                ->editColumn('current_stock', function ($row) {
+                    if (
+                        (int) $row->enable_stock !== 1 ||
+                        $row->type === 'variable'
+                    ) {
+                        return '--';
+                    }
+
+                    $currentStock = (float) ($row->current_stock ?? 0);
+
+                    $formattedStock = rtrim(
+                        rtrim(
+                            number_format($currentStock, 2, ',', '.'),
+                            '0'
+                        ),
+                        ','
+                    );
+
+                    if (
+                        (bool) $row->manages_packages &&
+                        !empty($row->weight)
+                    ) {
+                        $weightPerPackage = (float) str_replace(
+                            ',',
+                            '.',
+                            $row->weight
+                        );
+
+                        if ($weightPerPackage > 0) {
+                            $packages = max(
+                                0,
+                                (int) floor(
+                                    $currentStock / $weightPerPackage
+                                )
+                            );
+
+                            return sprintf(
+                                '%d %s (%s %s)',
+                                $packages,
+                                $packages === 1
+                                    ? __('product.package')
+                                    : __('product.packages'),
+                                $formattedStock,
+                                $row->unit
+                            );
+                        }
+                    }
+
+                    return $formattedStock . ' ' . $row->unit;
+                })
                 ->addColumn(
                     'price',
                     '<div style="white-space: nowrap;"><span class="display_currency" data-currency_symbol="true">{{$min_price}}</span> @if($max_price != $min_price && $type == "variable") -  <span class="display_currency" data-currency_symbol="true">{{$max_price}}</span>@endif </div>'
@@ -309,7 +360,7 @@ class ProductController extends Controller
 
         try {
             $business_id = $request->session()->get('user.business_id');
-            $form_fields = ['name', 'brand_id', 'unit_id', 'category_id', 'tax', 'type', 'barcode_type', 'sku', 'alert_quantity', 'tax_type', 'weight', 'product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4', 'product_description', 'hasMayorista'];
+            $form_fields = ['name', 'brand_id', 'unit_id', 'category_id', 'tax', 'type', 'barcode_type', 'sku', 'alert_quantity', 'tax_type', 'weight', 'manages_packages', 'product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4', 'product_description', 'hasMayorista',];
 
             $module_form_fields = $this->moduleUtil->getModuleFormField('product_form_fields');
             if (!empty($module_form_fields)) {
@@ -317,6 +368,29 @@ class ProductController extends Controller
             }
 
             $product_details = $request->only($form_fields);
+            $product_details['manages_packages'] =
+                (int) $request->input('manages_packages', 0) === 1
+                ? 1
+                : 0;
+
+            $product_details['weight'] = null;
+
+            if ($product_details['manages_packages'] === 1) {
+                $weightPerPackage = $this->productUtil->num_uf(
+                    $request->input('weight')
+                );
+
+                if ($weightPerPackage <= 0) {
+                    return redirect()
+                        ->back()
+                        ->withInput()
+                        ->withErrors([
+                            'weight' => __('product.weight_per_package_required'),
+                        ]);
+                }
+
+                $product_details['weight'] = $weightPerPackage;
+            }
             $product_details['business_id'] = $business_id;
             $product_details['created_by'] = $request->session()->get('user.id');
 
@@ -562,6 +636,7 @@ class ProductController extends Controller
                 'alert_quantity',
                 'tax_type',
                 'weight',
+                'manages_packages',
                 'product_custom_field1',
                 'product_custom_field2',
                 'product_custom_field3',
@@ -569,6 +644,30 @@ class ProductController extends Controller
                 'product_description',
                 'hasMayorista',
             ]);
+
+            $product_details['manages_packages'] =
+                (int) $request->input('manages_packages', 0) === 1
+                ? 1
+                : 0;
+
+            $product_details['weight'] = null;
+
+            if ($product_details['manages_packages'] === 1) {
+                $weightPerPackage = $this->productUtil->num_uf(
+                    $request->input('weight')
+                );
+
+                if ($weightPerPackage <= 0) {
+                    return redirect()
+                        ->back()
+                        ->withInput()
+                        ->withErrors([
+                            'weight' => __('product.weight_per_package_required'),
+                        ]);
+                }
+
+                $product_details['weight'] = $weightPerPackage;
+            }
 
             DB::beginTransaction();
 
@@ -609,6 +708,9 @@ class ProductController extends Controller
 
             $product->tax_type = $product_details['tax_type'];
             $product->weight = $product_details['weight'];
+
+            $product->manages_packages =
+                $product_details['manages_packages'];
 
             $product->product_custom_field1 =
                 $product_details['product_custom_field1'];

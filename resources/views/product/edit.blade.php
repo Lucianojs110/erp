@@ -7,9 +7,9 @@
     <section class="content-header">
         <h1>@lang('product.edit_product')</h1>
         <!-- <ol class="breadcrumb">
-            <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
-            <li class="active">Here</li>
-        </ol> -->
+                <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
+                <li class="active">Here</li>
+            </ol> -->
     </section>
 
     <!-- Main content -->
@@ -278,10 +278,42 @@
 
                 <div class="col-sm-4">
                     <div class="form-group">
-                        {!! Form::label('weight', __('lang_v1.weight') . ':') !!}
-                        {!! Form::text('weight', $product->weight, ['class' => 'form-control', 'placeholder' => __('lang_v1.weight')]) !!}
+                        {!! Form::label('weight', __('product.weight_per_package') . ':') !!}
+
+                        {!! Form::text('weight', old('weight', $product->weight), [
+                            'class' => 'form-control input_number',
+                            'placeholder' => __('product.weight_per_package_placeholder'),
+                        ]) !!}
                     </div>
                 </div>
+
+                <div class="col-sm-4">
+                    <div class="form-group">
+                        <br>
+
+                        <label>
+                            {{-- Permite enviar 0 cuando el checkbox está desmarcado --}}
+                            {!! Form::hidden('manages_packages', 0) !!}
+
+                            {!! Form::checkbox('manages_packages', 1, (bool) old('manages_packages', $product->manages_packages), [
+                                'class' => 'input-icheck',
+                                'id' => 'manages_packages',
+                            ]) !!}
+
+                            <strong>
+                                @lang('product.manages_packages')
+                            </strong>
+                        </label>
+
+                        <p class="help-block">
+                            <i>
+                                @lang('product.manages_packages_help')
+                            </i>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="clearfix"></div>
                 <div class="clearfix"></div>
                 <!--custom fields-->
                 <div class="col-sm-3">

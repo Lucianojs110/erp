@@ -6,20 +6,20 @@
     <section class="content-header">
         <h1>@lang('product.add_new_product')</h1>
         <!-- <ol class="breadcrumb">
-                                        <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
-                                        <li class="active">Here</li>
-                                    </ol> -->
+                                                        <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
+                                                        <li class="active">Here</li>
+                                                    </ol> -->
     </section>
 
     <!-- @if ($errors->any())
-                <div style="color: red;">
-                                        <ul>
-                                            @foreach ($errors->all() as $error)
+                                <div style="color: red;">
+                                                        <ul>
+                                                            @foreach ($errors->all() as $error)
     <li>{{ $error }}</li>
     @endforeach
-                                        </ul>
-                                    </div>
-                @endif -->
+                                                        </ul>
+                                                    </div>
+                                @endif -->
 
     <!-- Main content -->
     <section class="content">
@@ -267,13 +267,44 @@
 
                 <div class="col-sm-4">
                     <div class="form-group">
-                        {!! Form::label('weight', __('lang_v1.weight') . ':') !!}
+                        {!! Form::label('weight', __('product.weight_per_package') . ':') !!}
+
                         {!! Form::text('weight', !empty($duplicate_product->weight) ? $duplicate_product->weight : null, [
-                            'class' => 'form-control',
-                            'placeholder' => __('lang_v1.weight'),
+                            'class' => 'form-control input_number',
+                            'placeholder' => __('product.weight_per_package_placeholder'),
                         ]) !!}
                     </div>
                 </div>
+
+                <div class="col-sm-4">
+                    <div class="form-group">
+                        <br>
+
+                        <label>
+                            {!! Form::checkbox(
+                                'manages_packages',
+                                1,
+                                !empty($duplicate_product) ? (bool) $duplicate_product->manages_packages : false,
+                                [
+                                    'class' => 'input-icheck',
+                                    'id' => 'manages_packages',
+                                ],
+                            ) !!}
+
+                            <strong>
+                                @lang('product.manages_packages')
+                            </strong>
+                        </label>
+
+                        <p class="help-block">
+                            <i>
+                                @lang('product.manages_packages_help')
+                            </i>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="clearfix"></div>
                 <!--custom fields-->
                 <div class="clearfix"></div>
                 <div class="col-sm-3">
