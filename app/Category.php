@@ -31,7 +31,7 @@ class Category extends Model
     public static function catAndSubCategories($business_id)
     {
         $cacheKey = "categories_{$business_id}";
-        $categories = cache()->remember($cacheKey, 54000, function() use ($business_id) {
+        $categories = cache()->remember($cacheKey, 54000, function () use ($business_id) {
             return Category::where('business_id', $business_id)
                 ->where('parent_id', 0)
                 ->orderBy('name', 'asc')
@@ -44,12 +44,12 @@ class Category extends Model
         }
 
         $sub_cacheKey = "sub_categories_{$business_id}";
-        $sub_categories = cache()->remember($sub_cacheKey, 54000, function() use ($business_id) {
+        $sub_categories = cache()->remember($sub_cacheKey, 54000, function () use ($business_id) {
             return Category::where('business_id', $business_id)
-                    ->where('parent_id', '!=', 0)
-                    ->orderBy('name', 'asc')
-                    ->get()
-                    ->toArray();
+                ->where('parent_id', '!=', 0)
+                ->orderBy('name', 'asc')
+                ->get()
+                ->toArray();
         });
         $sub_cat_by_parent = [];
 
@@ -74,12 +74,9 @@ class Category extends Model
 
     public static function forDropdown($business_id)
     {
-        $cacheKey = "categories_for_dropdown_{$business_id}";
-        $categories = cache()->remember($cacheKey, 54000, function() use ($business_id) {
-            return Category::where('business_id', $business_id)
-                    ->where('parent_id', 0)
-                    ->pluck('name', 'id');
-        });
-        return $categories;
+        return Category::where('business_id', $business_id)
+            ->where('parent_id', 0)
+            ->orderBy('name')
+            ->pluck('name', 'id');
     }
 }
