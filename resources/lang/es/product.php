@@ -47,7 +47,7 @@ return [
     "file_to_import" => "Archivo para importar",
     "file_imported_successfully" => "Archivo importado con éxito",
     "download_csv_file_template" => "Descargar plantilla de archivo CSV",
-    'weight_per_package' => 'Peso por pieza (kg)',
+    'weight_per_package' => ' Peso por metro(kg)',
     'weight_per_package_placeholder' => 'Ingrese el peso por pieza en kg',
     'manages_packages' => 'Maneja piezas',
     'manages_packages_help' => 'Usa el campo peso como peso teórico de la pieza.',
