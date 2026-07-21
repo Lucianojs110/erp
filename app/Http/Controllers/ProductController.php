@@ -83,6 +83,7 @@ class ProductController extends Controller
                     'products.type',
                     'products.manages_packages',
                     'products.weight',
+                    'products.length',
                     'c1.name as category',
                     'c2.name as sub_category',
                     'units.actual_name as unit',
@@ -207,20 +208,33 @@ class ProductController extends Controller
 
                     if (
                         (bool) $row->manages_packages &&
-                        !empty($row->weight)
+                        !empty($row->weight) &&
+                        !empty($row->length)
                     ) {
-                        $weightPerPackage = (float) str_replace(
+                        $weightPerMeter = (float) str_replace(
                             ',',
                             '.',
                             $row->weight
                         );
 
+                        $length = (float) str_replace(
+                            ',',
+                            '.',
+                            $row->length
+                        );
+
+                        $weightPerPackage = $weightPerMeter * $length;
+
                         if ($weightPerPackage > 0) {
+                            $exactPackages = $currentStock / $weightPerPackage;
+
+                            /*
+         * Se redondea primero para evitar casos como
+         * 7.999999999 que floor() convertiría en 7.
+         */
                             $packages = max(
                                 0,
-                                (int) floor(
-                                    $currentStock / $weightPerPackage
-                                )
+                                (int) floor(round($exactPackages, 6))
                             );
 
                             return sprintf(
