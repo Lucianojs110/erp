@@ -246,7 +246,7 @@ $(document).ready(function () {
                     ')' +
                     '<br> Price: ' +
                     selling_price +
-                    ' (Out of stock) </li>';
+                    ' (Sin Stock) </li>';
                 return $(string).appendTo(ul);
             } else {
                 var string = '<div>' + item.name;
