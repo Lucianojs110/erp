@@ -385,34 +385,67 @@ class ProductImport implements ToCollection, WithStartRow
                 $product_array['variation']['dsp_inc_tax'] = $product_prices['dsp_inc_tax'];
                 $product_array['variation']['dsp_exc_tax'] = $product_prices['dsp_exc_tax'];
 
-                //Opening stock
-                if (!empty($value[20]) && $enable_stock == 1) {
-                    $product_array['opening_stock_details']['quantity'] = trim($value[20]);
+                // Opening Stock para productos simples.
+                // La planilla contiene el stock final deseado.
+                // Una celda vacía no modifica el stock.
+                // El valor 0 sí es válido.
+                $opening_stock_raw = isset($value[20])
+                    ? trim((string) $value[20])
+                    : '';
 
-                    if (!empty(trim($value[21]))) {
-                        $location_name = trim($value[21]);
+                if (
+                    $opening_stock_raw !== '' &&
+                    (int) $enable_stock === 1
+                ) {
+                    $product_array['opening_stock_details']['quantity'] =
+                        (float) str_replace(',', '.', $opening_stock_raw);
+
+                    if (
+                        isset($value[21]) &&
+                        trim((string) $value[21]) !== ''
+                    ) {
+                        $location_name = trim((string) $value[21]);
+
                         $location = BusinessLocation::where('name', $location_name)
                             ->where('business_id', $business_id)
                             ->first();
-                        if (!empty($location)) {
-                            $product_array['opening_stock_details']['location_id'] = $location->id;
-                        } else {
+
+                        if (empty($location)) {
                             $is_valid = false;
-                            $error_msg = "No location with name '$location_name' found in row no. $row_no";
+                            $error_msg =
+                                "No location with name '$location_name' found in row no. $row_no";
+
                             break;
                         }
                     } else {
-                        $location = BusinessLocation::where('business_id', $business_id)->first();
-                        $product_array['opening_stock_details']['location_id'] = $location->id;
+                        $location = BusinessLocation::where(
+                            'business_id',
+                            $business_id
+                        )->first();
+
+                        if (empty($location)) {
+                            $is_valid = false;
+                            $error_msg =
+                                "No business location found in row no. $row_no";
+
+                            break;
+                        }
                     }
 
-                    $product_array['opening_stock_details']['expiry_date'] = null;
+                    $product_array['opening_stock_details']['location_id'] =
+                        $location->id;
 
-                    //Stock expiry date
-                    if (!empty($value[22])) {
-                        $product_array['opening_stock_details']['exp_date'] = Carbon::createFromFormat('m-d-Y', trim($value[22]))->format('Y-m-d');
-                    } else {
-                        $product_array['opening_stock_details']['exp_date'] = null;
+                    $product_array['opening_stock_details']['exp_date'] = null;
+
+                    if (
+                        isset($value[22]) &&
+                        trim((string) $value[22]) !== ''
+                    ) {
+                        $product_array['opening_stock_details']['exp_date'] =
+                            Carbon::createFromFormat(
+                                'm-d-Y',
+                                trim((string) $value[22])
+                            )->format('Y-m-d');
                     }
                 }
             } elseif ($product_array['type'] == 'variable') {
