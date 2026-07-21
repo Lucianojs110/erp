@@ -708,7 +708,7 @@ class ProductImport implements ToCollection, WithStartRow
                 unset($product_data['transfer_group_price']);
 
 
-                $haveStock = true;
+
 
                 // Buscar nuevamente el producto correspondiente a esta fila.
                 $product = null;
@@ -724,9 +724,6 @@ class ProductImport implements ToCollection, WithStartRow
                 if ($productExists) {
                     // Actualiza el producto existente.
                     $product->update($product_data);
-
-                    // No vuelve a crear el stock de apertura.
-                    $haveStock = false;
                 } else {
                     // Crea un producto nuevo.
                     $product = Product::create($product_data);
@@ -828,12 +825,58 @@ class ProductImport implements ToCollection, WithStartRow
                         );
                     }
 
-                    if (!empty($opening_stock) && $haveStock) {
-                        $this->addOpeningStock(
-                            $opening_stock,
-                            $product,
-                            $business_id
-                        );
+                    if ($opening_stock !== null) {
+                        if ($productExists) {
+                            // Producto existente:
+                            // deja el stock exactamente como figura en la planilla.
+
+                            $variation = Variation::where('product_id', $product->id)
+                                ->whereNull('deleted_at')
+                                ->first();
+
+                            if (empty($variation)) {
+                                throw new \Exception(
+                                    "No se encontró la variación del producto SKU {$product->sku}"
+                                );
+                            }
+
+                            $location_id = (int) $opening_stock['location_id'];
+
+                            $target_quantity = (float) str_replace(
+                                ',',
+                                '.',
+                                (string) $opening_stock['quantity']
+                            );
+
+                            $stock_query = DB::table('variation_location_details')
+                                ->where('product_id', $product->id)
+                                ->where('variation_id', $variation->id)
+                                ->where('location_id', $location_id);
+
+                            if ($stock_query->exists()) {
+                                $stock_query->update([
+                                    'qty_available' => $target_quantity,
+                                    'updated_at' => Carbon::now(),
+                                ]);
+                            } else {
+                                DB::table('variation_location_details')->insert([
+                                    'product_id' => $product->id,
+                                    'variation_id' => $variation->id,
+                                    'location_id' => $location_id,
+                                    'qty_available' => $target_quantity,
+                                    'created_at' => Carbon::now(),
+                                    'updated_at' => Carbon::now(),
+                                ]);
+                            }
+                        } else {
+                            // Producto nuevo:
+                            // crea normalmente el stock inicial.
+                            $this->addOpeningStock(
+                                $opening_stock,
+                                $product,
+                                $business_id
+                            );
+                        }
                     }
                 }
 
