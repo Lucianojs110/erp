@@ -20,6 +20,7 @@ use App\SellingPriceGroup;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithStartRow;
+use Illuminate\Support\Facades\DB;
 
 class ProductImport implements ToCollection, WithStartRow
 {
@@ -538,42 +539,97 @@ class ProductImport implements ToCollection, WithStartRow
                     ];
                 }
 
-                //Opening stock
-                if (!empty($value[20]) && $enable_stock == 1) {
-                    $variation_os = array_map('trim', explode('|', $value[20]));
+                // Opening Stock para productos variables.
+                // La celda vacía no modifica el stock.
+                // El valor 0 sí es válido.
+                if (
+                    isset($value[20]) &&
+                    trim((string) $value[20]) !== '' &&
+                    (int) $enable_stock === 1
+                ) {
+                    $opening_stock_value = trim((string) $value[20]);
 
-                    //$product_array['opening_stock_details']['quantity'] = $variation_os;
+                    // Permite valores separados por | y números con coma decimal.
+                    // Ejemplo: 10|0|25,5
+                    $variation_os = array_map(
+                        function ($stock) {
+                            return (float) str_replace(
+                                ',',
+                                '.',
+                                trim((string) $stock)
+                            );
+                        },
+                        explode('|', $opening_stock_value)
+                    );
 
-                    //Check if count of variation and opening stock is matching or not.
-                    if (count($product_array['variation']['variations']) != count($variation_os)) {
+                    // Verificar que exista un stock por cada variación.
+                    if (
+                        count($product_array['variation']['variations']) !==
+                        count($variation_os)
+                    ) {
                         $is_valid = false;
-                        $error_msg = "Opening Stock mismatched with VARIATION VALUES in row no. $row_no";
+                        $error_msg =
+                            "Opening Stock mismatched with VARIATION VALUES in row no. $row_no";
+
                         break;
                     }
 
-                    if (!empty(trim($value[21]))) {
-                        $location_name = trim($value[21]);
-                        $location = BusinessLocation::where('name', $location_name)
+                    // Buscar la ubicación indicada en la planilla.
+                    if (
+                        isset($value[21]) &&
+                        trim((string) $value[21]) !== ''
+                    ) {
+                        $location_name = trim((string) $value[21]);
+
+                        $location = BusinessLocation::where(
+                            'name',
+                            $location_name
+                        )
                             ->where('business_id', $business_id)
                             ->first();
+
                         if (empty($location)) {
                             $is_valid = false;
-                            $error_msg = "No location with name '$location_name' found in row no. $row_no";
+                            $error_msg =
+                                "No location with name '$location_name' found in row no. $row_no";
+
                             break;
                         }
                     } else {
-                        $location = BusinessLocation::where('business_id', $business_id)->first();
+                        // Si la planilla no indica ubicación, usar la primera.
+                        $location = BusinessLocation::where(
+                            'business_id',
+                            $business_id
+                        )->first();
+
+                        if (empty($location)) {
+                            $is_valid = false;
+                            $error_msg =
+                                "No business location found in row no. $row_no";
+
+                            break;
+                        }
                     }
-                    $product_array['variation']['opening_stock_location'] = $location->id;
 
-                    foreach ($variation_os as $k => $v) {
-                        $product_array['variation']['variations'][$k]['opening_stock'] = $v;
-                        $product_array['variation']['variations'][$k]['opening_stock_exp_date'] = null;
+                    $product_array['variation']['opening_stock_location'] =
+                        $location->id;
 
-                        if (!empty($value[22])) {
-                            $product_array['variation']['variations'][$k]['opening_stock_exp_date'] = Carbon::createFromFormat('m-d-Y', trim($value[22]))->format('Y-m-d');
-                        } else {
-                            $product_array['variation']['variations'][$k]['opening_stock_exp_date'] = null;
+                    foreach ($variation_os as $k => $stock_quantity) {
+                        $product_array['variation']['variations'][$k]['opening_stock'] =
+                            $stock_quantity;
+
+                        $product_array['variation']['variations'][$k]['opening_stock_exp_date'] =
+                            null;
+
+                        if (
+                            isset($value[22]) &&
+                            trim((string) $value[22]) !== ''
+                        ) {
+                            $product_array['variation']['variations'][$k]['opening_stock_exp_date'] =
+                                Carbon::createFromFormat(
+                                    'm-d-Y',
+                                    trim((string) $value[22])
+                                )->format('Y-m-d');
                         }
                     }
                 }
