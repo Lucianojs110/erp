@@ -6,11 +6,11 @@
 
     <!-- Content Header (Page header) -->
     <!-- <section class="content-header">
-                                <h1>Add Purchase</h1> -->
+                                    <h1>Add Purchase</h1> -->
     <!-- <ol class="breadcrumb">
-                                    <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
-                                    <li class="active">Here</li>
-                                </ol> -->
+                                        <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
+                                        <li class="active">Here</li>
+                                    </ol> -->
     <!-- </section> -->
 
     <!-- Main content -->
@@ -27,26 +27,27 @@
                                     data-original-title="" title=""></i></h3>
                         </div>
                         <input type="hidden" id="item_addition_method" value="{{ $business_details->item_addition_method }}">
-                        @if (true)
+                        @if (count($business_locations) > 1)
                             <div class="col-sm-6">
                                 <div class="form-group" style="margin-bottom: 0px;">
                                     <div class="input-group">
                                         <span class="input-group-addon">
                                             <i class="fa fa-map-marker"></i>
                                         </span>
+
                                         {!! Form::select(
                                             'select_location_id',
                                             $business_locations,
-                                            null,
+                                            $default_location,
                                             [
                                                 'class' => 'form-control input-sm mousetrap',
-                                                'placeholder' => __('lang_v1.select_location'),
                                                 'id' => 'select_location_id',
                                                 'required',
                                                 'autofocus',
                                             ],
                                             $bl_attributes,
                                         ) !!}
+
                                         <span class="input-group-addon">
                                             @show_tooltip(__('tooltip.sale_location'))
                                         </span>
@@ -234,10 +235,10 @@
                                                 </th>
                                             @endif
                                             <!--
-                                                                 <th class="text-center col-md-2 {{ $hide_tax }}">
-                                                                  @lang('sale.price_inc_tax')
-                                                                 </th>
-                                                              -->
+                                                                         <th class="text-center col-md-2 {{ $hide_tax }}">
+                                                                          @lang('sale.price_inc_tax')
+                                                                         </th>
+                                                                      -->
                                             <th class="text-center col-md-2">
                                                 @lang('sale.unit_price')
                                             </th>

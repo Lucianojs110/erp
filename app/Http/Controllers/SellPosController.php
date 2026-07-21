@@ -203,6 +203,7 @@ class SellPosController extends Controller
         $business_locations = $business_locations['locations'];
 
         $default_location = null;
+
         if (count($business_locations) == 1) {
             foreach ($business_locations as $id => $name) {
                 $default_location = $id;

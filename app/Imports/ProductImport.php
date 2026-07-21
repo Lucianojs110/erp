@@ -301,14 +301,47 @@ class ProductImport implements ToCollection, WithStartRow
                 break;
             }
 
-            //Weight
-            if (isset($value[24])) {
-                $product_array['weight'] = trim($value[24]);
+            // Weight
+            if (isset($value[24]) && trim((string) $value[24]) !== '') {
+                $product_array['weight'] = (float) str_replace(
+                    ',',
+                    '.',
+                    trim((string) $value[24])
+                );
             } else {
-                $product_array['weight'] = '';
+                $product_array['weight'] = 0;
+            }
+
+            // Length: pertenece a products
+            if (isset($value[39]) && trim((string) $value[39]) !== '') {
+                $product_array['length'] = (float) str_replace(
+                    ',',
+                    '.',
+                    trim((string) $value[39])
+                );
+            } else {
+                $product_array['length'] = 0;
             }
 
 
+            // Base Price USD: pertenece a variations
+            if (isset($value[38]) && trim((string) $value[38]) !== '') {
+                $product_array['variation']['default_purchase_price_usd'] =
+                    (float) str_replace(
+                        ',',
+                        '.',
+                        trim((string) $value[38])
+                    );
+            } else {
+                $product_array['variation']['default_purchase_price_usd'] = null;
+            }
+
+            // Length: largo de la presentación en metros
+            if (isset($value[39]) && trim((string) $value[39]) !== '') {
+                $product_array['length'] = (float) $value[39];
+            } else {
+                $product_array['length'] = 0;
+            }
 
             if ($product_array['type'] == 'single') {
                 //Calculate profit margin
@@ -585,23 +618,35 @@ class ProductImport implements ToCollection, WithStartRow
                 unset($product_data['transfer_group']);
                 unset($product_data['transfer_group_price']);
 
+
                 $haveStock = true;
 
-                if ($skuExist) {
-                    $product = Product::where('sku', $product_data['sku'])->first();
+                // Buscar nuevamente el producto correspondiente a esta fila.
+                $product = null;
+
+                if (!empty(trim($product_data['sku']))) {
+                    $product = Product::where('sku', $product_data['sku'])
+                        ->where('business_id', $business_id)
+                        ->first();
+                }
+
+                $productExists = !empty($product);
+
+                if ($productExists) {
+                    // Actualiza el producto existente.
                     $product->update($product_data);
+
+                    // No vuelve a crear el stock de apertura.
                     $haveStock = false;
                 } else {
-
-                    //Create new product
+                    // Crea un producto nuevo.
                     $product = Product::create($product_data);
 
+                    // Generar SKU cuando no fue informado.
+                    if (trim($product->sku) === '') {
+                        $product->sku = $this->productUtil
+                            ->generateProductSku($product->id);
 
-
-                    //If auto generate sku generate new sku
-                    if ($product->sku == ' ') {
-                        $sku = $this->productUtil->generateProductSku($product->id);
-                        $product->sku = $sku;
                         $product->save();
                     }
                 }
@@ -617,35 +662,89 @@ class ProductImport implements ToCollection, WithStartRow
                 );
 
 
-                ProductVariation::where('product_id', $product->id)->delete();
-                Variation::where('product_id', $product->id)->forceDelete();
+
 
                 //Create single product variation
                 if ($product->type == 'single') {
-                    $this->productUtil->createSingleProductVariation(
-                        $product,
-                        $product->sku,
-                        $variation_data['dpp_exc_tax'],
-                        $variation_data['dpp_inc_tax'],
-                        $variation_data['profit_percent'],
-                        $variation_data['dsp_exc_tax'],
-                        $variation_data['dsp_inc_tax'],
-                        0,
-                        0
-                    );
-                    if (!empty($opening_stock) && $haveStock) {
-                        $this->addOpeningStock($opening_stock, $product, $business_id);
-                    }
-                } elseif ($product->type == 'variable') {
-                    //Create variable product variations
-                    $this->productUtil->createVariableProductVariations(
-                        $product,
-                        [$variation_data],
-                        $business_id
-                    );
+                    if ($productExists) {
+                        // Actualizar la variación existente sin cambiar su ID.
+                        $variation = Variation::where('product_id', $product->id)
+                            ->whereNull('deleted_at')
+                            ->first();
 
-                    if (!empty($value[20]) && $enable_stock == 1 && $haveStock) {
-                        $this->addOpeningStockForVariable($variation_data, $product, $business_id);
+                        if (!empty($variation)) {
+                            $variation->sub_sku = $product->sku;
+
+                            $variation->default_purchase_price =
+                                $this->productUtil->num_uf(
+                                    $variation_data['dpp_exc_tax']
+                                );
+
+                            $variation->dpp_inc_tax =
+                                $this->productUtil->num_uf(
+                                    $variation_data['dpp_inc_tax']
+                                );
+
+                            $variation->profit_percent =
+                                $this->productUtil->num_uf(
+                                    $variation_data['profit_percent']
+                                );
+
+                            $variation->default_sell_price =
+                                $this->productUtil->num_uf(
+                                    $variation_data['dsp_exc_tax']
+                                );
+
+                            $variation->sell_price_inc_tax =
+                                $this->productUtil->num_uf(
+                                    $variation_data['dsp_inc_tax']
+                                );
+
+                            $variation->default_purchase_price_usd =
+                                !empty($variation_data['default_purchase_price_usd'])
+                                ? $this->productUtil->num_uf(
+                                    $variation_data['default_purchase_price_usd']
+                                )
+                                : null;
+
+                            $variation->save();
+                        } else {
+                            // El producto existe, pero no tiene variación.
+                            $this->productUtil->createSingleProductVariation(
+                                $product,
+                                $product->sku,
+                                $variation_data['dpp_exc_tax'],
+                                $variation_data['dpp_inc_tax'],
+                                $variation_data['profit_percent'],
+                                $variation_data['dsp_exc_tax'],
+                                $variation_data['dsp_inc_tax'],
+                                0,
+                                0,
+                                $variation_data['default_purchase_price_usd'] ?? null
+                            );
+                        }
+                    } else {
+                        // Producto nuevo.
+                        $this->productUtil->createSingleProductVariation(
+                            $product,
+                            $product->sku,
+                            $variation_data['dpp_exc_tax'],
+                            $variation_data['dpp_inc_tax'],
+                            $variation_data['profit_percent'],
+                            $variation_data['dsp_exc_tax'],
+                            $variation_data['dsp_inc_tax'],
+                            0,
+                            0,
+                            $variation_data['default_purchase_price_usd'] ?? null
+                        );
+                    }
+
+                    if (!empty($opening_stock) && $haveStock) {
+                        $this->addOpeningStock(
+                            $opening_stock,
+                            $product,
+                            $business_id
+                        );
                     }
                 }
 

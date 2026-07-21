@@ -410,31 +410,57 @@ $(document).ready(function () {
         if (sell_form_validator) {
             sell_form_validator.element($(this));
         }
+
         if (pos_form_validator) {
             pos_form_validator.element($(this));
         }
-        // var max_qty = parseFloat($(this).data('rule-max'));
-        var entered_qty = __read_number($(this));
 
+        var entered_qty = __read_number($(this));
         var tr = $(this).parents('tr');
 
         var hasMayorista = tr.find('input.hasMayorista').val();
-        var originalPrice = __read_number(tr.find('input.originalPrice'));
+        var originalPrice = __read_number(
+            tr.find('input.originalPrice')
+        );
+
         var unit_price = originalPrice;
+
         if (hasMayorista == 1) {
-            var mayoristaPrice = __read_number(tr.find('input.precioMayorista'));
-            var cantidadMayorista = __read_number(tr.find('input.cantidadMayorista'));
+            var mayoristaPrice = __read_number(
+                tr.find('input.precioMayorista')
+            );
+
+            var cantidadMayorista = __read_number(
+                tr.find('input.cantidadMayorista')
+            );
+
             if (entered_qty >= cantidadMayorista) {
                 unit_price = mayoristaPrice;
-                __write_number(tr.find('input.pos_unit_price'), mayoristaPrice);
+
+                __write_number(
+                    tr.find('input.pos_unit_price'),
+                    mayoristaPrice
+                );
             } else {
-                __write_number(tr.find('input.pos_unit_price'), originalPrice);
+                __write_number(
+                    tr.find('input.pos_unit_price'),
+                    originalPrice
+                );
             }
         }
 
         var line_total = entered_qty * unit_price;
 
-        __write_number(tr.find('input.pos_line_total'), line_total, false, 2);
+        __write_number(
+            tr.find('input.pos_line_total'),
+            line_total,
+            false,
+            2
+        );
+
+        tr.find('span.pos_line_total_text').text(
+            __currency_trans_from_en(line_total, true)
+        );
 
         pos_total_row();
     });
@@ -1421,10 +1447,13 @@ function pos_product_row(variation_id, cant1) {
                     pos_each_row(this_row);
 
                     //For initial discount if present
-                    var line_total = __read_number(this_row.find('input.pos_line_total'));
-                    this_row.find('span.pos_line_total_text').text(line_total);
+                    var line_total = __read_number(
+                        this_row.find('input.pos_line_total')
+                    );
 
-                    pos_total_row();
+                    this_row.find('span.pos_line_total_text').text(
+                        __currency_trans_from_en(line_total, true)
+                    );
                     if (result.enable_sr_no == '1') {
                         var new_row = $('table#pos_table tbody').find('tr').last();
                         new_row.find('.add-pos-row-description').trigger('click');
@@ -1487,32 +1516,66 @@ function pos_total_row() {
     var iva27 = 0;
 
     $('table#pos_table tbody tr').each(function () {
-        const quantity = __read_number($(this).find('input.pos_quantity'));
+        const row = $(this);
 
-        const width = $(this).find('input.width').val()
+        const quantity = __read_number(
+            row.find('input.pos_quantity')
+        );
 
-        const height = $(this).find('input.height').val()
+        const lineTotal = __read_number(
+            row.find('input.pos_line_total')
+        );
 
-        const quantity_of_sheets = $(this).find('input.quantity_of_sheets').val()
+        // Actualiza el subtotal visible de la fila
+        row.find('span.pos_line_total_text').text(
+            __currency_trans_from_en(lineTotal, true)
+        );
 
-        let total_unities = (width / 1000) * (height / 1000) * quantity_of_sheets * quantity
-        $(this).find('div[name="total_unities"]').text(total_unities)
+        const width = row.find('input.width').val();
+        const height = row.find('input.height').val();
+        const quantity_of_sheets = row
+            .find('input.quantity_of_sheets')
+            .val();
 
+        const total_unities =
+            (width / 1000) *
+            (height / 1000) *
+            quantity_of_sheets *
+            quantity;
 
-        total_quantity = total_quantity + quantity;
-        price_total = price_total + __read_number($(this).find('input.pos_line_total'));
-        price_unit_total =
-            price_unit_total + quantity * __read_number($(this).find('input.pos_unit_price_neto'));
+        row.find('div[name="total_unities"]').text(total_unities);
 
-        const tax = __read_number($(this).find('input.tax_id'));
-        // const width = $(this).find('input.pos_width')
+        total_quantity += quantity;
+        price_total += lineTotal;
+
+        price_unit_total +=
+            quantity *
+            __read_number(
+                row.find('input.pos_unit_price_neto')
+            );
+
+        const tax = __read_number(
+            row.find('input.tax_id')
+        );
 
         if (tax == '1') {
-            iva21 += quantity * __read_number($(this).find('input.pos_unit_price_neto'));
+            iva21 +=
+                quantity *
+                __read_number(
+                    row.find('input.pos_unit_price_neto')
+                );
         } else if (tax == '2') {
-            iva10 += quantity * __read_number($(this).find('input.pos_unit_price_neto'));
+            iva10 +=
+                quantity *
+                __read_number(
+                    row.find('input.pos_unit_price_neto')
+                );
         } else if (tax == '3') {
-            iva27 += quantity * __read_number($(this).find('input.pos_unit_price_neto'));
+            iva27 +=
+                quantity *
+                __read_number(
+                    row.find('input.pos_unit_price_neto')
+                );
         }
     });
 

@@ -73,12 +73,17 @@
                                                 style="width:25px; height:25px;">
                                             <label class="form-check-label" for="registrar">Registrar en AFIP</label>
                                         </div>
-                                        <div class="form-check mb-0">
-                                            <input class="form-check-input" type="checkbox" name="carries_a_bag"
-                                                id="carries_a_bag" style="width:25px; height:25px;">
-                                            <label class="form-check-label"
-                                                for="carries_a_bag">@lang('lang_v1.carries_a_bag')</label>
-                                        </div>
+                                        @if (($pos_settings['carries_a_bag'] ?? 0) == 1)
+                                            <div class="form-check mb-0">
+                                                <input class="form-check-input" type="checkbox" name="carries_a_bag"
+                                                    id="carries_a_bag" value="1"
+                                                    style="width: 25px; height: 25px;">
+
+                                                <label class="form-check-label" for="carries_a_bag">
+                                                    @lang('lang_v1.carries_a_bag')
+                                                </label>
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
                             </td>

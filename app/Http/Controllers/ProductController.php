@@ -1477,11 +1477,20 @@ class ProductController extends Controller
                 'unit_id',
                 'category_id',
                 'tax',
+                'type',
                 'barcode_type',
-                'tax_type',
                 'sku',
                 'alert_quantity',
-                'type'
+                'tax_type',
+                'weight',
+                'length',
+                'manages_packages',
+                'product_custom_field1',
+                'product_custom_field2',
+                'product_custom_field3',
+                'product_custom_field4',
+                'product_description',
+                'hasMayorista',
             ];
 
             $module_form_fields = $this->moduleUtil->getModuleData('product_form_fields');
@@ -1536,9 +1545,10 @@ class ProductController extends Controller
                 $request->input('single_dsp'),
                 $request->input('single_dsp_inc_tax'),
                 0,
-                00,
                 0,
-                00
+                0,
+                0,
+                $request->input('base_price_usd', 0)
             );
 
             if ($product->enable_stock == 1 && !empty($request->input('opening_stock'))) {
