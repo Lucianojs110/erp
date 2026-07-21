@@ -6,11 +6,11 @@
 
     <!-- Content Header (Page header) -->
     <!-- <section class="content-header">
-                                    <h1>Add Purchase</h1> -->
+                                        <h1>Add Purchase</h1> -->
     <!-- <ol class="breadcrumb">
-                                        <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
-                                        <li class="active">Here</li>
-                                    </ol> -->
+                                            <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
+                                            <li class="active">Here</li>
+                                        </ol> -->
     <!-- </section> -->
 
     <!-- Main content -->
@@ -235,10 +235,10 @@
                                                 </th>
                                             @endif
                                             <!--
-                                                                         <th class="text-center col-md-2 {{ $hide_tax }}">
-                                                                          @lang('sale.price_inc_tax')
-                                                                         </th>
-                                                                      -->
+                                                                                 <th class="text-center col-md-2 {{ $hide_tax }}">
+                                                                                  @lang('sale.price_inc_tax')
+                                                                                 </th>
+                                                                              -->
                                             <th class="text-center col-md-2">
                                                 @lang('sale.unit_price')
                                             </th>
@@ -300,7 +300,7 @@
 
 
 
-    <script src="{{ asset('js/pos.js?v=' . $asset_v) }}"></script>
+    <script src="{{ asset('js/pos.js') }}?v={{ filemtime(public_path('js/pos.js')) }}"></script>
     <script src="{{ asset('js/printer.js?v=' . $asset_v) }}"></script>
     <script src="{{ asset('js/product.js?v=' . $asset_v) }}"></script>
     <script src="{{ asset('js/opening_stock.js?v=' . $asset_v) }}"></script>
