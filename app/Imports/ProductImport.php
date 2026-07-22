@@ -324,6 +324,10 @@ class ProductImport implements ToCollection, WithStartRow
                 $product_array['length'] = 0;
             }
 
+            // Habilitar manejo de paquetes automáticamente
+            $product_array['manages_packages'] =
+                ($product_array['weight'] > 0 || $product_array['length'] > 0) ? 1 : 0;
+
 
             // Base Price USD: pertenece a variations
             if (isset($value[38]) && trim((string) $value[38]) !== '') {
