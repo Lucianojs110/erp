@@ -184,7 +184,7 @@
                                                     <td>
                                                         {!! Form::text(
                                                             'piece_quantity_display[' . $key . '][' . $variation->id . '][' . $sub_key . ']',
-                                                            @format_quantity($pieces),
+                                                            number_format($pieces, 2, ',', '.'),
                                                             [
                                                                 'class' => 'form-control input-sm input_number pieces_quantity',
                                                                 'data-weight-per-piece' => $weightPerPiece,
