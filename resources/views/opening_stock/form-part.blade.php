@@ -1,34 +1,38 @@
 @php
     /*
-     * El campo weight guarda el peso de una pieza en kilogramos.
-     * Acepta valores guardados como:
-     * 10
-     * 10.50
-     * 10,50
+     * weight guarda el peso por metro.
+     * length guarda el largo de la pieza.
      */
+
     $rawWeight = trim((string) ($product->weight ?? ''));
 
     if (is_numeric($rawWeight)) {
-        $weightPerPiece = (float) $rawWeight;
+        $weightPerMeter = (float) $rawWeight;
     } else {
         $normalizedWeight = str_replace('.', '', $rawWeight);
         $normalizedWeight = str_replace(',', '.', $normalizedWeight);
 
-        $weightPerPiece = (float) $normalizedWeight;
+        $weightPerMeter = (float) $normalizedWeight;
     }
+
+    $rawLength = trim((string) ($product->length ?? ''));
+
+    if (is_numeric($rawLength)) {
+        $pieceLength = (float) $rawLength;
+    } else {
+        $normalizedLength = str_replace('.', '', $rawLength);
+        $normalizedLength = str_replace(',', '.', $normalizedLength);
+
+        $pieceLength = (float) $normalizedLength;
+    }
+
+    /*
+     * Peso total de una barra, caño o pieza completa.
+     */
+    $weightPerPiece = $weightPerMeter * $pieceLength;
 
     $managesPieces = (bool) $product->manages_packages && $weightPerPiece > 0;
 
-    /*
-     * Columnas anteriores al subtotal:
-     *
-     * - Producto
-     * - Cantidad/Peso
-     * - Costo unitario
-     * - Piezas, cuando corresponda
-     * - Vencimiento, cuando corresponda
-     * - Lote, cuando corresponda
-     */
     $footerColspan = 3;
 
     if ($managesPieces) {
@@ -161,13 +165,11 @@
                                                     {{ $product->name }}
 
                                                     @if ($product->type == 'variable')
-                                                        (
-                                                        <b>
+                                                        (<b>
                                                             {{ $variation->product_variation->name }}
                                                         </b>
                                                         :
-                                                        {{ $variation->name }}
-                                                        )
+                                                        {{ $variation->name }})
                                                     @endif
 
                                                     @if (!empty($purchase_line_id))
