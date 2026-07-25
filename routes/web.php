@@ -87,6 +87,8 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
     Route::get('/products/list-no-variation', 'ProductController@getProductsWithoutVariations');
     Route::get('products/massiveUpdate', 'ProductController@massiveUpdate');
     Route::post('products/masiveUpdatePercent', 'ProductController@massiveUpdatePercent')->name('products.massiveUpdatePercent');
+    Route::get('products/{product_id}/edit-current-stock', 'StockAdjustmentController@editCurrentStock')->name('products.edit-current-stock');
+    Route::post('products/update-current-stock', 'StockAdjustmentController@updateCurrentStock')->name('products.update-current-stock');
 
     Route::post('/products/get_sub_categories', 'ProductController@getSubCategories');
     Route::post('/products/product_form_part', 'ProductController@getProductVariationFormPart');
