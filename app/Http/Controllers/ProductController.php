@@ -157,18 +157,42 @@ class ProductController extends Controller
                         $html .= '<li class="divider"></li>';
 
                         if (auth()->user()->can('product.create')) {
-                            if ($row->enable_stock == 1) {
-                                $html .=
-                                    '<li><a href="#" data-href="' . action('OpeningStockController@add', ['product_id' => $row->id]) . '" class="add-opening-stock"><i class="fa fa-database"></i> ' . __("lang_v1.add_edit_opening_stock") . '</a></li>';
-                            }
+                            if (auth()->user()->can('product.create')) {
+                                if ($row->enable_stock == 1) {
+                                    $html .=
+                                        '<li>
+                <a href="#"
+                    data-href="' .
+                                        route(
+                                            'products.edit-current-stock',
+                                            ['product_id' => $row->id]
+                                        ) .
+                                        '"
+                    class="add-opening-stock"
+                >
+                    <i class="fa fa-database"></i> ' .
+                                        __("lang_v1.add_edit_opening_stock") .
+                                        '</a>
+            </li>';
+                                }
 
-                            if ($selling_price_group_count > 0) {
-                                $html .=
-                                    '<li><a href="' . action('ProductController@addSellingPrices', [$row->id]) . '"><i class="fa fa-money"></i> ' . __("lang_v1.add_selling_price_group_prices") . '</a></li>';
-                            }
+                                if ($selling_price_group_count > 0) {
+                                    $html .=
+                                        '<li><a href="' .
+                                        action('ProductController@addSellingPrices', [$row->id]) .
+                                        '"><i class="fa fa-money"></i> ' .
+                                        __("lang_v1.add_selling_price_group_prices") .
+                                        '</a></li>';
+                                }
 
-                            $html .=
-                                '<li><a href="' . action('ProductController@create', ["d" => $row->id]) . '"><i class="fa fa-copy"></i> ' . __("lang_v1.duplicate_product") . '</a></li>';
+                                $html .=
+                                    '<li><a href="' .
+                                    action('ProductController@create', ['d' => $row->id]) .
+                                    '"><i class="fa fa-copy"></i> ' .
+                                    __("lang_v1.duplicate_product") .
+                                    '</a></li>';
+                            }
+                            '<li><a href="' . action('ProductController@create', ["d" => $row->id]) . '"><i class="fa fa-copy"></i> ' . __("lang_v1.duplicate_product") . '</a></li>';
                         }
 
                         $html .= '</ul></div>';
