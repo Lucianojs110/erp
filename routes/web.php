@@ -58,7 +58,7 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
 
     Route::resource('brands', 'BrandController');
 
-    Route::resource('payment-account', 'PaymentAccountController');
+    //Route::resource('payment-account', 'PaymentAccountController');
 
     Route::resource('tax-rates', 'TaxRateController');
 
