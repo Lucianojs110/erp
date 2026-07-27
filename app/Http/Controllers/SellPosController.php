@@ -1459,101 +1459,287 @@ class SellPosController extends Controller
         try {
             $row_count = request()->get('product_row');
             $row_count = $row_count + 1;
+
             $is_direct_sell = false;
+
             if (request()->get('is_direct_sell') == 'true') {
                 $is_direct_sell = true;
             }
 
-            $business_id = request()->session()->get('user.business_id');
+            $business_id = request()
+                ->session()
+                ->get('user.business_id');
 
-            $product = $this->productUtil->getDetailsFromVariation($variation_id, $business_id, $location_id);
+            $product = $this->productUtil->getDetailsFromVariation(
+                $variation_id,
+                $business_id,
+                $location_id
+            );
 
+            /*
+         * getDetailsFromVariation no está devolviendo estos campos.
+         * Los buscamos directamente desde products y los agregamos
+         * al objeto que se envía al Blade.
+         */
+            $package_product = Product::query()
+                ->select([
+                    'id',
+                    'manages_packages',
+                    'weight',
+                    'length',
+                ])
+                ->where('business_id', $business_id)
+                ->where('id', $product->product_id)
+                ->first();
 
+            if (!empty($package_product)) {
+                $product->manages_packages = (int) (
+                    $package_product->manages_packages ?? 0
+                );
 
-            $product->formatted_qty_available = $this->productUtil->num_f($product->qty_available, false, null, true);
+                $product->weight = (float) (
+                    $package_product->weight ?? 0
+                );
 
+                $product->length = (float) (
+                    $package_product->length ?? 0
+                );
+            } else {
+                $product->manages_packages = 0;
+                $product->weight = 0;
+                $product->length = 0;
+            }
 
+            $product->formatted_qty_available =
+                $this->productUtil->num_f(
+                    $product->qty_available,
+                    false,
+                    null,
+                    true
+                );
 
-            $sub_units = $this->productUtil->getSubUnits($business_id, $product->unit_id);
+            $sub_units = $this->productUtil->getSubUnits(
+                $business_id,
+                $product->unit_id
+            );
 
-            //Get customer group and change the price accordingly
+            // Get customer group and change the price accordingly
             $customer_id = request()->get('customer_id', null);
-            $cg = $this->contactUtil->getCustomerGroup($business_id, $customer_id);
-            $percent = (empty($cg) || empty($cg->amount)) ? 0 : $cg->amount;
-            $product->default_sell_price = $product->default_sell_price + ($percent * $product->default_sell_price / 100);
-            $product->sell_price_inc_tax = $product->sell_price_inc_tax + ($percent * $product->sell_price_inc_tax / 100);
 
-            $tax_dropdown = TaxRate::forBusinessDropdown($business_id, true, true);
+            $cg = $this->contactUtil->getCustomerGroup(
+                $business_id,
+                $customer_id
+            );
 
-            $enabled_modules = $this->transactionUtil->allModulesEnabled();
+            $percent = (
+                empty($cg) ||
+                empty($cg->amount)
+            ) ? 0 : $cg->amount;
 
-            //Get lot number dropdown if enabled
+            $product->default_sell_price =
+                $product->default_sell_price +
+                (
+                    $percent *
+                    $product->default_sell_price /
+                    100
+                );
+
+            $product->sell_price_inc_tax =
+                $product->sell_price_inc_tax +
+                (
+                    $percent *
+                    $product->sell_price_inc_tax /
+                    100
+                );
+
+            $tax_dropdown = TaxRate::forBusinessDropdown(
+                $business_id,
+                true,
+                true
+            );
+
+            $enabled_modules =
+                $this->transactionUtil->allModulesEnabled();
+
+            // Get lot number dropdown if enabled
             $lot_numbers = [];
-            if (request()->session()->get('business.enable_lot_number') == 1 || request()->session()->get('business.enable_product_expiry') == 1) {
-                $lot_number_obj = $this->transactionUtil->getLotNumbersFromVariation($variation_id, $business_id, $location_id, true);
+
+            if (
+                request()
+                ->session()
+                ->get('business.enable_lot_number') == 1 ||
+                request()
+                ->session()
+                ->get('business.enable_product_expiry') == 1
+            ) {
+                $lot_number_obj =
+                    $this->transactionUtil
+                    ->getLotNumbersFromVariation(
+                        $variation_id,
+                        $business_id,
+                        $location_id,
+                        true
+                    );
+
                 foreach ($lot_number_obj as $lot_number) {
-                    $lot_number->qty_formated = $this->productUtil->num_f($lot_number->qty_available);
+                    $lot_number->qty_formated =
+                        $this->productUtil->num_f(
+                            $lot_number->qty_available
+                        );
+
                     $lot_numbers[] = $lot_number;
                 }
             }
+
             $product->lot_numbers = $lot_numbers;
 
             $price_group = request()->input('price_group');
-            if (!empty($price_group)) {
-                $variation_group_prices = $this->productUtil->getVariationGroupPrice($variation_id, $price_group, $product->tax_id);
 
-                if (!empty($variation_group_prices['price_inc_tax'])) {
-                    $product->sell_price_inc_tax = $variation_group_prices['price_inc_tax'];
-                    $product->default_sell_price = $variation_group_prices['price_exc_tax'];
+            if (!empty($price_group)) {
+                $variation_group_prices =
+                    $this->productUtil
+                    ->getVariationGroupPrice(
+                        $variation_id,
+                        $price_group,
+                        $product->tax_id
+                    );
+
+                if (
+                    !empty($variation_group_prices['price_inc_tax'])
+                ) {
+                    $product->sell_price_inc_tax =
+                        $variation_group_prices['price_inc_tax'];
+
+                    $product->default_sell_price =
+                        $variation_group_prices['price_exc_tax'];
                 }
             }
 
-            $business_details = $this->businessUtil->getDetails($business_id);
-            $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
+            $business_details =
+                $this->businessUtil->getDetails($business_id);
+
+            $pos_settings =
+                empty($business_details->pos_settings)
+                ? $this->businessUtil->defaultPosSettings()
+                : json_decode(
+                    $business_details->pos_settings,
+                    true
+                );
 
             $output['success'] = true;
 
             $waiters = null;
-            if ($this->productUtil->isModuleEnabled('service_staff') && !empty($pos_settings['inline_service_staff'])) {
+
+            if (
+                $this->productUtil->isModuleEnabled(
+                    'service_staff'
+                ) &&
+                !empty($pos_settings['inline_service_staff'])
+            ) {
                 $waiters_enabled = true;
-                $waiters = $this->productUtil->serviceStaffDropdown($business_id, $location_id);
+
+                $waiters =
+                    $this->productUtil->serviceStaffDropdown(
+                        $business_id,
+                        $location_id
+                    );
             }
 
-            if (request()->get('type') == 'sell-return') {
-                $output['html_content'] =  view('sell_return.partials.product_row')
-                    ->with(compact('product', 'row_count', 'tax_dropdown', 'enabled_modules', 'sub_units'))
+            if (
+                request()->get('type') == 'sell-return'
+            ) {
+                $output['html_content'] =
+                    view('sell_return.partials.product_row')
+                    ->with(
+                        compact(
+                            'product',
+                            'row_count',
+                            'tax_dropdown',
+                            'enabled_modules',
+                            'sub_units'
+                        )
+                    )
                     ->render();
             } else {
-                $is_cg = !empty($cg->id) ? true : false;
-                $is_pg = !empty($price_group) ? true : false;
-                $discount = $this->productUtil->getProductDiscount($product, $business_id, $location_id, $is_cg, $is_pg);
+                $is_cg = !empty($cg->id);
+                $is_pg = !empty($price_group);
 
-                $output['html_content'] =  view('sale_pos.product_row')
-                    ->with(compact('product', 'row_count', 'tax_dropdown', 'enabled_modules', 'pos_settings', 'sub_units', 'discount', 'waiters'))
+                $discount =
+                    $this->productUtil->getProductDiscount(
+                        $product,
+                        $business_id,
+                        $location_id,
+                        $is_cg,
+                        $is_pg
+                    );
+
+                $output['html_content'] =
+                    view('sale_pos.product_row')
+                    ->with(
+                        compact(
+                            'product',
+                            'row_count',
+                            'tax_dropdown',
+                            'enabled_modules',
+                            'pos_settings',
+                            'sub_units',
+                            'discount',
+                            'waiters'
+                        )
+                    )
                     ->render();
             }
 
-            $output['enable_sr_no'] = $product->enable_sr_no;
+            $output['enable_sr_no'] =
+                $product->enable_sr_no;
 
-            if ($this->transactionUtil->isModuleEnabled('modifiers')  && !$is_direct_sell) {
-                $this_product = Product::where('business_id', $business_id)
-                    ->find($product->product_id);
-                if (count($this_product->modifier_sets) > 0) {
-                    $product_ms = $this_product->modifier_sets;
-                    $output['html_modifier'] =  view('restaurant.product_modifier_set.modifier_for_product')
-                        ->with(compact('product_ms', 'row_count'))->render();
+            if (
+                $this->transactionUtil
+                ->isModuleEnabled('modifiers') &&
+                !$is_direct_sell
+            ) {
+                $this_product = Product::where(
+                    'business_id',
+                    $business_id
+                )->find($product->product_id);
+
+                if (
+                    !empty($this_product) &&
+                    count($this_product->modifier_sets) > 0
+                ) {
+                    $product_ms =
+                        $this_product->modifier_sets;
+
+                    $output['html_modifier'] =
+                        view(
+                            'restaurant.product_modifier_set.modifier_for_product'
+                        )
+                        ->with(
+                            compact(
+                                'product_ms',
+                                'row_count'
+                            )
+                        )
+                        ->render();
                 }
             }
         } catch (\Exception $e) {
-            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+            \Log::emergency(
+                'File:' .
+                    $e->getFile() .
+                    ' Line:' .
+                    $e->getLine() .
+                    ' Message:' .
+                    $e->getMessage()
+            );
 
             $output['success'] = false;
-            $output['msg'] = __('lang_v1.item_out_of_stock');
+            $output['msg'] =
+                __('lang_v1.item_out_of_stock');
         }
 
         return $output;
     }
-
     /**
      * Returns the HTML row for a payment in POS
      *

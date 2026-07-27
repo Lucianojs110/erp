@@ -236,9 +236,14 @@ $(document).ready(function () {
 
                         $(this).autocomplete('close');
                     }
-                } else if (ui.content.length == 0) {
+                } else if (ui.content.length === 0) {
                     toastr.error(LANG.no_products_found);
-                    $('input#search_product').select();
+
+                    const typedTerm = globalThis.term1 || $(this).val();
+
+                    $(this)
+                        .val(typedTerm)
+                        .focus();
                 }
             },
 
@@ -527,6 +532,53 @@ $(document).ready(function () {
 
         pos_total_row();
     });
+
+
+    // Calcular peso según cantidad de piezas
+    $('table#pos_table tbody').on(
+        'input change',
+        'input.pos_pieces',
+        function () {
+            var tr = $(this).closest('tr');
+
+            var managesPackages = parseInt(
+                tr.find('input.manages_packages').val(),
+                10
+            ) || 0;
+
+            if (managesPackages !== 1) {
+                return;
+            }
+
+            var pieces = parseInt($(this).val(), 10) || 0;
+
+            var weightPerMeter = parseFloat(
+                tr.find('input.package_weight_per_meter').val()
+            ) || 0;
+
+            var packageLength = parseFloat(
+                tr.find('input.package_length').val()
+            ) || 0;
+
+            var totalWeight =
+                pieces *
+                packageLength *
+                weightPerMeter;
+
+            totalWeight =
+                Math.round(totalWeight * 1000) / 1000;
+
+            var quantityInput =
+                tr.find('input.pos_quantity');
+
+            __write_number(
+                quantityInput,
+                totalWeight
+            );
+
+            quantityInput.trigger('change');
+        }
+    );
 
     //Remove row on click on remove row
     $('table#pos_table tbody').on('click', 'i.pos_remove_row', function () {
