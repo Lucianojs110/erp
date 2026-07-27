@@ -346,62 +346,77 @@ $(document).ready(function () {
 
     //If change in unit price update price including tax and line total
     $('table#pos_table tbody').on('change', 'input.pos_unit_price', function () {
-        var unit_price = __read_number($(this));
         var tr = $(this).parents('tr');
 
-        // Actualizar piezas cuando se modifica manualmente el peso
-        var managesPackages = parseInt(
-            tr.find('input.manages_packages').val(),
-            10
-        ) || 0;
-
-        if (managesPackages === 1) {
-            var weightPerMeter = parseFloat(
-                tr.find('input.package_weight_per_meter').val()
-            ) || 0;
-
-            var packageLength = parseFloat(
-                tr.find('input.package_length').val()
-            ) || 0;
-
-            var weightPerPiece =
-                weightPerMeter * packageLength;
-
-            if (weightPerPiece > 0) {
-                var pieces =
-                    entered_qty / weightPerPiece;
-
-                pieces =
-                    Math.round(pieces * 1000) / 1000;
-
-                tr.find('input.pos_pieces').val(pieces);
-            }
-        }
-
         //calculate discounted unit price
-        var discounted_unit_price = calculate_discounted_unit_price(tr);
+        var discounted_unit_price =
+            calculate_discounted_unit_price(tr);
 
-        var tax_rate = tr.find('select.tax_id').find(':selected').data('rate');
-        var quantity = __read_number(tr.find('input.pos_quantity'));
+        var tax_rate = tr
+            .find('select.tax_id')
+            .find(':selected')
+            .data('rate');
 
-        var unit_price_inc_tax = __add_percent(discounted_unit_price, tax_rate);
-        var line_total = quantity * unit_price_inc_tax;
+        var quantity = __read_number(
+            tr.find('input.pos_quantity')
+        );
 
-        var tax_id = __read_number(tr.find('input.tax_id'));
+        var unit_price_inc_tax = __add_percent(
+            discounted_unit_price,
+            tax_rate
+        );
+
+        var line_total =
+            quantity * unit_price_inc_tax;
+
+        var tax_id = __read_number(
+            tr.find('input.tax_id')
+        );
 
         if (tax_id == '1') {
-            __write_number(tr.find('input.pos_unit_price_neto'), unit_price_inc_tax / 1.21);
+            __write_number(
+                tr.find('input.pos_unit_price_neto'),
+                unit_price_inc_tax / 1.21
+            );
         } else if (tax_id == '2') {
-            __write_number(tr.find('input.pos_unit_price_neto'), unit_price_inc_tax / 1.105);
+            __write_number(
+                tr.find('input.pos_unit_price_neto'),
+                unit_price_inc_tax / 1.105
+            );
         }
 
-        __write_number(tr.find('input.pos_unit_price'), unit_price_inc_tax);
-        __write_number(tr.find('input.pos_line_total'), line_total, false, 2);
-        tr.find('span.pos_line_total_text').text(__currency_trans_from_en(line_total, true));
+        // Guarda el nuevo precio para que no vuelva al anterior
+        // cuando se modifiquen los kilos o las piezas.
+        __write_number(
+            tr.find('input.originalPrice'),
+            unit_price_inc_tax
+        );
+
+        __write_number(
+            tr.find('input.pos_unit_price'),
+            unit_price_inc_tax
+        );
+
+        __write_number(
+            tr.find('input.pos_line_total'),
+            line_total,
+            false,
+            2
+        );
+
+        tr.find('span.pos_line_total_text').text(
+            __currency_trans_from_en(
+                line_total,
+                true
+            )
+        );
+
         pos_each_row(tr);
         pos_total_row();
         round_row_to_iraqi_dinnar(tr);
     });
+
+
     //If change in tax rate then update unit price according to it.
     $('table#pos_table tbody').on('change', 'select.tax_id', function () {
         var tr = $(this).parents('tr');
