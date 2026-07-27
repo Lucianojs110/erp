@@ -124,7 +124,7 @@
             @endphp
             <!--
   @if (!empty($product->lot_numbers))
-   <select class="form-control lot_number input-sm" name="products[{{ $row_count }}][lot_no_line_id]" @if (!empty($product->transaction_sell_lines_id)) disabled @endif>
+<select class="form-control lot_number input-sm" name="products[{{ $row_count }}][lot_no_line_id]" @if (!empty($product->transaction_sell_lines_id)) disabled @endif>
     <option value="">@lang('lang_v1.lot_n_expiry')</option>
     @foreach ($product->lot_numbers as $lot_number)
 @php
@@ -157,7 +157,7 @@
 </option>
 @endforeach
    </select>
-  @endif
+@endif
   -->
         @endif
 
@@ -232,7 +232,7 @@
                 </label>
 
                 <input type="number" class="form-control input-sm pos_pieces"
-                    name="products[{{ $row_count }}][packages]" min="0" step="1" value=""
+                    name="products[{{ $row_count }}][packages]" min="0" step="0.001" value=""
                     placeholder="Cantidad de piezas" autocomplete="off"
                     @if ($weight_per_meter <= 0 || $package_length <= 0) disabled @endif>
 

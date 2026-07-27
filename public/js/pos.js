@@ -349,6 +349,35 @@ $(document).ready(function () {
         var unit_price = __read_number($(this));
         var tr = $(this).parents('tr');
 
+        // Actualizar piezas cuando se modifica manualmente el peso
+        var managesPackages = parseInt(
+            tr.find('input.manages_packages').val(),
+            10
+        ) || 0;
+
+        if (managesPackages === 1) {
+            var weightPerMeter = parseFloat(
+                tr.find('input.package_weight_per_meter').val()
+            ) || 0;
+
+            var packageLength = parseFloat(
+                tr.find('input.package_length').val()
+            ) || 0;
+
+            var weightPerPiece =
+                weightPerMeter * packageLength;
+
+            if (weightPerPiece > 0) {
+                var pieces =
+                    entered_qty / weightPerPiece;
+
+                pieces =
+                    Math.round(pieces * 1000) / 1000;
+
+                tr.find('input.pos_pieces').val(pieces);
+            }
+        }
+
         //calculate discounted unit price
         var discounted_unit_price = calculate_discounted_unit_price(tr);
 
@@ -486,7 +515,42 @@ $(document).ready(function () {
         var entered_qty = __read_number($(this));
         var tr = $(this).parents('tr');
 
-        var hasMayorista = tr.find('input.hasMayorista').val();
+        // Actualizar piezas cuando se modifica manualmente el peso
+        var managesPackages = parseInt(
+            tr.find('input.manages_packages').val(),
+            10
+        ) || 0;
+
+        if (managesPackages === 1) {
+            var weightPerMeter = parseFloat(
+                String(
+                    tr.find('input.package_weight_per_meter').val() || 0
+                ).replace(',', '.')
+            ) || 0;
+
+            var packageLength = parseFloat(
+                String(
+                    tr.find('input.package_length').val() || 0
+                ).replace(',', '.')
+            ) || 0;
+
+            var weightPerPiece =
+                weightPerMeter * packageLength;
+
+            if (weightPerPiece > 0) {
+                var pieces =
+                    entered_qty / weightPerPiece;
+
+                pieces =
+                    Math.round(pieces * 1000) / 1000;
+
+                tr.find('input.pos_pieces').val(pieces);
+            }
+        }
+
+        var hasMayorista =
+            tr.find('input.hasMayorista').val();
+
         var originalPrice = __read_number(
             tr.find('input.originalPrice')
         );
@@ -517,7 +581,8 @@ $(document).ready(function () {
             }
         }
 
-        var line_total = entered_qty * unit_price;
+        var line_total =
+            entered_qty * unit_price;
 
         __write_number(
             tr.find('input.pos_line_total'),
@@ -527,7 +592,10 @@ $(document).ready(function () {
         );
 
         tr.find('span.pos_line_total_text').text(
-            __currency_trans_from_en(line_total, true)
+            __currency_trans_from_en(
+                line_total,
+                true
+            )
         );
 
         pos_total_row();
