@@ -225,57 +225,155 @@
             $weight_per_package = $weight_per_meter * $package_length;
         @endphp
 
-        @if ($manages_packages)
-            <div class="form-group package-calculator" style="margin-bottom: 6px;">
-                <label style="font-size: 12px; margin-bottom: 2px;">
-                    Piezas
-                </label>
+        <div
+            style="
+                display: flex;
+                align-items: flex-start;
+                gap: 8px;
+                width: 100%;
+                margin-bottom: 4px;
+            ">
 
-                <input type="number" class="form-control input-sm pos_pieces"
-                    name="products[{{ $row_count }}][packages]" min="0" step="0.001" value=""
-                    placeholder="Cantidad de piezas" autocomplete="off"
-                    @if ($weight_per_meter <= 0 || $package_length <= 0) disabled @endif>
+            @if ($manages_packages)
+                <div
+                    style="
+                        flex: 1 1 48%;
+                        min-width: 0;
+                    ">
 
-                @if ($weight_per_meter > 0 && $package_length > 0)
-                    <small class="text-muted">
-                        {{ @num_format($weight_per_meter) }} kg/m
-                        ×
-                        {{ @num_format($package_length) }} m
-                        =
-                        {{ @num_format($weight_per_package) }} kg por pieza
-                    </small>
-                @else
-                    <small class="text-danger">
-                        Falta configurar el peso por metro o el largo del producto.
-                    </small>
+                    <div
+                        style="
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            gap: 4px;
+                            min-height: 18px;
+                            margin-bottom: 4px;
+                        ">
+                        <label for="pos_pieces_{{ $row_count }}"
+                            style="
+                                margin: 0;
+                                color: #3c4b57;
+                                font-size: 10px;
+                                font-weight: 700;
+                                text-transform: uppercase;
+                                letter-spacing: .3px;
+                            ">
+                            Piezas
+                        </label>
+
+                        @if ($weight_per_meter > 0 && $package_length > 0)
+                            <span
+                                style="
+                                    display: inline-block;
+                                    padding: 2px 5px;
+                                    color: #247548;
+                                    background: #e8f6ee;
+                                    border: 1px solid #cce9d8;
+                                    border-radius: 999px;
+                                    font-size: 9px;
+                                    font-weight: 700;
+                                    white-space: nowrap;
+                                ">
+                                {{ @num_format($weight_per_package) }} kg/pieza
+                            </span>
+                        @endif
+                    </div>
+
+                    <input id="pos_pieces_{{ $row_count }}" type="number" class="form-control input-sm pos_pieces"
+                        name="products[{{ $row_count }}][packages]" min="0" step="0.001" value=""
+                        placeholder="Ej: 1,5" inputmode="decimal" autocomplete="off"
+                        style="
+                            height: 30px;
+                            padding: 4px 7px;
+                            font-weight: 600;
+                        "
+                        @if ($weight_per_meter <= 0 || $package_length <= 0) disabled @endif>
+
+                    @if ($weight_per_meter > 0 && $package_length > 0)
+                        <div
+                            style="
+                                margin-top: 3px;
+                                color: #7a8791;
+                                font-size: 9px;
+                                line-height: 1.2;
+                                white-space: nowrap;
+                            ">
+                            {{ @num_format($weight_per_meter) }} kg/m
+                            <span style="margin: 0 2px; color: #a0a9b0;">×</span>
+                            {{ @num_format($package_length) }} m
+                        </div>
+                    @else
+                        <div
+                            style="
+                                margin-top: 3px;
+                                color: #d9534f;
+                                font-size: 9px;
+                                line-height: 1.2;
+                            ">
+                            Faltan peso o largo
+                        </div>
+                    @endif
+
+                    <input type="hidden" class="manages_packages" value="1">
+                    <input type="hidden" class="package_weight_per_meter" value="{{ $weight_per_meter }}">
+                    <input type="hidden" class="package_length" value="{{ $package_length }}">
+                </div>
+            @else
+                <input type="hidden" class="manages_packages" value="0">
+            @endif
+
+            <div
+                style="
+                    @if ($manages_packages) flex: 1 1 52%;
+                        min-width: 125px;
+                    @else
+                        width: 100%; @endif
+                ">
+
+                @if ($manages_packages)
+                    <div
+                        style="
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            min-height: 18px;
+                            margin-bottom: 4px;
+                            color: #3c4b57;
+                            font-size: 10px;
+                            font-weight: 700;
+                            text-transform: uppercase;
+                            letter-spacing: .3px;
+                        ">
+                        <span>Peso total</span>
+                        <span>Kg.</span>
+                    </div>
                 @endif
 
-                <input type="hidden" class="manages_packages" value="1">
+                <div class="input-group input-number">
+                    <span class="input-group-btn">
+                        <button type="button" class="btn btn-default btn-flat quantity-down">
+                            <i class="fa fa-minus text-danger"></i>
+                        </button>
+                    </span>
 
-                <input type="hidden" class="package_weight_per_meter" value="{{ $weight_per_meter }}">
+                    <input type="text" data-min="0"
+                        class="form-control pos_quantity input_number mousetrap input_quantity"
+                        value="{{ @format_quantity($product->quantity_ordered) }}"
+                        name="products[{{ $row_count }}][quantity]"
+                        data-allow-overselling="@if (empty($pos_settings['allow_overselling'])) {{ 'false' }}@else{{ 'true' }} @endif"
+                        @if ($allow_decimal) data-decimal=1 @else data-decimal=0 data-rule-abs_digit="true" data-msg-abs_digit="@lang('lang_v1.decimal_value_not_allowed')" @endif
+                        data-rule-required="true" data-msg-required="@lang('validation.custom-messages.this_field_is_required')"
+                        @if ($product->enable_stock && empty($pos_settings['allow_overselling'])) data-rule-max-value="{{ $max_qty_rule }}" data-qty_available="{{ $product->qty_available }}" data-msg-max-value="{{ $max_qty_msg }}" data-msg_max_default="@lang('validation.custom-messages.quantity_not_available', ['qty'=> $product->formatted_qty_available, 'unit' => $product->unit  ])" @endif>
 
-                <input type="hidden" class="package_length" value="{{ $package_length }}">
+                    <span class="input-group-btn">
+                        <button type="button" class="btn btn-default btn-flat quantity-up"
+                            @if (isset($has_delivery) && $has_delivery) disabled @endif>
+                            <i class="fa fa-plus text-success"></i>
+                        </button>
+                    </span>
+                </div>
             </div>
-        @else
-            <input type="hidden" class="manages_packages" value="0">
-        @endif
-
-        <div class="input-group input-number">
-            <span class="input-group-btn">
-                <button type="button" class="btn btn-default btn-flat quantity-down"><i
-                        class="fa fa-minus text-danger"></i></button>
-            </span>
-            <input type="text" data-min="0"
-                class="form-control pos_quantity input_number mousetrap input_quantity"
-                value="{{ @format_quantity($product->quantity_ordered) }}"
-                name="products[{{ $row_count }}][quantity]"
-                data-allow-overselling="@if (empty($pos_settings['allow_overselling'])) {{ 'false' }}@else{{ 'true' }} @endif"
-                @if ($allow_decimal) data-decimal=1 @else data-decimal=0 data-rule-abs_digit="true" data-msg-abs_digit="@lang('lang_v1.decimal_value_not_allowed')" @endif
-                data-rule-required="true" data-msg-required="@lang('validation.custom-messages.this_field_is_required')"
-                @if ($product->enable_stock && empty($pos_settings['allow_overselling'])) data-rule-max-value="{{ $max_qty_rule }}" data-qty_available="{{ $product->qty_available }}" data-msg-max-value="{{ $max_qty_msg }}" data-msg_max_default="@lang('validation.custom-messages.quantity_not_available', ['qty'=> $product->formatted_qty_available, 'unit' => $product->unit  ])" @endif>
-            <span class="input-group-btn"><button type="button" class="btn btn-default btn-flat quantity-up"
-                    @if (isset($has_delivery) && $has_delivery) disabled @endif><i
-                        class="fa fa-plus text-success"></i></button></span>
         </div>
 
         <input type="hidden" name="products[{{ $row_count }}][product_unit_id]"
