@@ -7,9 +7,9 @@
     <section class="content-header">
         <h1>@lang('product.edit_product')</h1>
         <!-- <ol class="breadcrumb">
-                <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
-                <li class="active">Here</li>
-            </ol> -->
+                                <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
+                                <li class="active">Here</li>
+                            </ol> -->
     </section>
 
     <!-- Main content -->
@@ -213,14 +213,6 @@
                         </div>
                     </div>
                 @endif
-                <div class="col-sm-4">
-                    <div class="checkbox">
-                        <label>
-                            {!! Form::checkbox('enable_sr_no', 1, $product->enable_sr_no, ['class' => 'input-icheck']) !!} <strong>@lang('lang_v1.enable_imei_or_sr_no')</strong>
-                        </label>
-                        @show_tooltip(__('lang_v1.tooltip_sr_no'))
-                    </div>
-                </div>
 
                 <!-- Rack, Row & position number -->
                 @if (session('business.enable_racks') || session('business.enable_row') || session('business.enable_position'))
@@ -275,24 +267,66 @@
                     @endforeach
                 @endif
 
-
-                <div class="col-sm-4">
+                {{-- Tipo de medida --}}
+                <div class="col-sm-3">
                     <div class="form-group">
-                        {!! Form::label('weight', __('product.weight_per_package') . ':') !!}
+                        {!! Form::label('measurement_type', 'Tipo de medida:') !!}
+
+                        {!! Form::select(
+                            'measurement_type',
+                            [
+                                'linear' => 'Metro lineal',
+                                'surface' => 'Metro cuadrado',
+                            ],
+                            old('measurement_type', $product->measurement_type ?? 'linear'),
+                            [
+                                'class' => 'form-control select2',
+                                'id' => 'measurement_type',
+                            ],
+                        ) !!}
+                    </div>
+                </div>
+
+                {{-- Peso por metro lineal o metro cuadrado --}}
+                <div class="col-sm-3">
+                    <div class="form-group">
+                        {!! Form::label('weight', 'Peso por metro lineal (kg/m):', [
+                            'id' => 'weight_label',
+                        ]) !!}
 
                         {!! Form::text('weight', old('weight', $product->weight), [
                             'class' => 'form-control input_number',
-                            'placeholder' => __('product.weight_per_package_placeholder'),
+                            'id' => 'weight',
+                            'placeholder' => 'Ej: 2,23',
                         ]) !!}
                     </div>
                 </div>
 
-                <div class="col-sm-4">
+                {{-- Largo o superficie de la pieza --}}
+                <div class="col-sm-3">
+                    <div class="form-group">
+                        {!! Form::label('length', 'Largo de la pieza (m):', [
+                            'id' => 'length_label',
+                        ]) !!}
+
+                        {!! Form::text('length', old('length', $product->length), [
+                            'class' => 'form-control input_number',
+                            'id' => 'length',
+                            'placeholder' => 'Ej: 6 o 12',
+                        ]) !!}
+
+                        <p class="help-block" id="measurement_help">
+                            Peso de la pieza = kg/m × metros.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-sm-3">
                     <div class="form-group">
                         <br>
 
                         <label>
-                            {{-- Permite enviar 0 cuando el checkbox está desmarcado --}}
+                            {{-- Envía 0 cuando el checkbox está desmarcado --}}
                             {!! Form::hidden('manages_packages', 0) !!}
 
                             {!! Form::checkbox('manages_packages', 1, (bool) old('manages_packages', $product->manages_packages), [
@@ -301,60 +335,24 @@
                             ]) !!}
 
                             <strong>
-                                @lang('product.manages_packages')
+                                Maneja piezas
                             </strong>
                         </label>
 
                         <p class="help-block">
                             <i>
-                                @lang('product.manages_packages_help')
+                                Permite ingresar la cantidad de piezas y convertirla a kilos según el peso y la medida de cada
+                                pieza.
                             </i>
                         </p>
                     </div>
                 </div>
 
                 <div class="clearfix"></div>
-                <div class="clearfix"></div>
                 <!--custom fields-->
-                <div class="col-sm-3">
-                    <div class="form-group">
-                        {!! Form::label('product_custom_field1', __('lang_v1.product_custom_field1') . ':') !!}
-                        {!! Form::text('product_custom_field1', $product->product_custom_field1, [
-                            'class' => 'form-control',
-                            'placeholder' => __('lang_v1.product_custom_field1'),
-                        ]) !!}
-                    </div>
-                </div>
 
-                <div class="col-sm-3">
-                    <div class="form-group">
-                        {!! Form::label('product_custom_field2', __('lang_v1.product_custom_field2') . ':') !!}
-                        {!! Form::text('product_custom_field2', $product->product_custom_field2, [
-                            'class' => 'form-control',
-                            'placeholder' => __('lang_v1.product_custom_field2'),
-                        ]) !!}
-                    </div>
-                </div>
 
-                <div class="col-sm-3">
-                    <div class="form-group">
-                        {!! Form::label('product_custom_field3', __('lang_v1.product_custom_field3') . ':') !!}
-                        {!! Form::text('product_custom_field3', $product->product_custom_field3, [
-                            'class' => 'form-control',
-                            'placeholder' => __('lang_v1.product_custom_field3'),
-                        ]) !!}
-                    </div>
-                </div>
 
-                <div class="col-sm-3">
-                    <div class="form-group">
-                        {!! Form::label('product_custom_field4', __('lang_v1.product_custom_field4') . ':') !!}
-                        {!! Form::text('product_custom_field4', $product->product_custom_field4, [
-                            'class' => 'form-control',
-                            'placeholder' => __('lang_v1.product_custom_field4'),
-                        ]) !!}
-                    </div>
-                </div>
                 <!--custom fields-->
                 @include('layouts.partials.module_form_part')
             </div>
@@ -462,6 +460,65 @@
 
     <script>
         $(document).ready(function() {
+
+            /**
+             * Ajusta los campos según sea metro lineal o metro cuadrado.
+             */
+            function updateMeasurementFields() {
+                var measurementType =
+                    $('#measurement_type').val() || 'linear';
+
+                var isSurface =
+                    measurementType === 'surface';
+
+                $('#weight_label').text(
+                    isSurface ?
+                    'Peso por metro cuadrado (kg/m²):' :
+                    'Peso por metro lineal (kg/m):'
+                );
+
+                $('#length_label').text(
+                    isSurface ?
+                    'Superficie de la pieza (m²):' :
+                    'Largo de la pieza (m):'
+                );
+
+                $('#weight').attr(
+                    'placeholder',
+                    isSurface ?
+                    'Ej: 5,60' :
+                    'Ej: 2,23'
+                );
+
+                $('#length').attr(
+                    'placeholder',
+                    isSurface ?
+                    'Ej: 2,97 o 4,50' :
+                    'Ej: 6 o 12'
+                );
+
+                $('#measurement_help').text(
+                    isSurface ?
+                    'Peso de la pieza = kg/m² × superficie.' :
+                    'Peso de la pieza = kg/m × largo.'
+                );
+            }
+
+            /**
+             * Actualiza al cambiar el selector.
+             */
+            $(document).on(
+                'change',
+                '#measurement_type',
+                function() {
+                    updateMeasurementFields();
+                }
+            );
+
+            /**
+             * Inicializa las etiquetas al abrir el formulario.
+             */
+            updateMeasurementFields();
 
             /**
              * Lee números respetando el formato configurado

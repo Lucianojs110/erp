@@ -6,20 +6,20 @@
     <section class="content-header">
         <h1>@lang('product.add_new_product')</h1>
         <!-- <ol class="breadcrumb">
-                                                        <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
-                                                        <li class="active">Here</li>
-                                                    </ol> -->
+                                                                                    <li><a href="#"><i class="fa fa-dashboard"></i> Level</a></li>
+                                                                                    <li class="active">Here</li>
+                                                                                </ol> -->
     </section>
 
     <!-- @if ($errors->any())
-                                <div style="color: red;">
-                                                        <ul>
-                                                            @foreach ($errors->all() as $error)
+                                                            <div style="color: red;">
+                                                                                    <ul>
+                                                                                        @foreach ($errors->all() as $error)
     <li>{{ $error }}</li>
     @endforeach
-                                                        </ul>
-                                                    </div>
-                                @endif -->
+                                                                                    </ul>
+                                                                                </div>
+                                                            @endif -->
 
     <!-- Main content -->
     <section class="content">
@@ -210,16 +210,7 @@
                     </div>
                 @endif
 
-                <div class="col-sm-4">
-                    <div class="form-group">
-                        <br>
-                        <label>
-                            {!! Form::checkbox('enable_sr_no', 1, !empty($duplicate_product) ? $duplicate_product->enable_sr_no : false, [
-                                'class' => 'input-icheck',
-                            ]) !!} <strong>@lang('lang_v1.enable_imei_or_sr_no')</strong>
-                        </label> @show_tooltip(__('lang_v1.tooltip_sr_no'))
-                    </div>
-                </div>
+
 
 
 
@@ -265,18 +256,60 @@
                     @endforeach
                 @endif
 
-                <div class="col-sm-4">
-                    <div class="form-group">
-                        {!! Form::label('weight', __('product.weight_per_package') . ':') !!}
+                @php
+                    $currentProduct = $product ?? ($duplicate_product ?? null);
 
-                        {!! Form::text('weight', !empty($duplicate_product->weight) ? $duplicate_product->weight : null, [
+                    $measurementType = old('measurement_type', $currentProduct->measurement_type ?? 'linear');
+                @endphp
+
+                <div class="col-sm-3">
+                    <div class="form-group">
+                        {!! Form::label('measurement_type', 'Tipo de medida:') !!}
+
+                        {!! Form::select(
+                            'measurement_type',
+                            [
+                                'linear' => 'Metro lineal',
+                                'surface' => 'Metro cuadrado',
+                            ],
+                            $measurementType,
+                            [
+                                'class' => 'form-control select2',
+                                'id' => 'measurement_type',
+                            ],
+                        ) !!}
+                    </div>
+                </div>
+
+                <div class="col-sm-3">
+                    <div class="form-group">
+                        {!! Form::label('weight', 'Peso por metro (kg/m):', ['id' => 'weight_label']) !!}
+
+                        {!! Form::text('weight', old('weight', $currentProduct->weight ?? null), [
                             'class' => 'form-control input_number',
-                            'placeholder' => __('product.weight_per_package_placeholder'),
+                            'id' => 'weight',
+                            'placeholder' => 'Ej: 2,23',
                         ]) !!}
                     </div>
                 </div>
 
-                <div class="col-sm-4">
+                <div class="col-sm-3">
+                    <div class="form-group">
+                        {!! Form::label('length', 'Largo de la pieza (m):', ['id' => 'length_label']) !!}
+
+                        {!! Form::text('length', old('length', $currentProduct->length ?? null), [
+                            'class' => 'form-control input_number',
+                            'id' => 'length',
+                            'placeholder' => 'Ej: 6 o 12',
+                        ]) !!}
+
+                        <p class="help-block" id="measurement_help">
+                            Peso de la pieza = kg/m × metros.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-sm-3">
                     <div class="form-group">
                         <br>
 
@@ -284,21 +317,20 @@
                             {!! Form::checkbox(
                                 'manages_packages',
                                 1,
-                                !empty($duplicate_product) ? (bool) $duplicate_product->manages_packages : false,
+                                !empty($currentProduct) ? (bool) $currentProduct->manages_packages : false,
                                 [
                                     'class' => 'input-icheck',
                                     'id' => 'manages_packages',
                                 ],
                             ) !!}
 
-                            <strong>
-                                @lang('product.manages_packages')
-                            </strong>
+                            <strong>Maneja piezas</strong>
                         </label>
 
                         <p class="help-block">
                             <i>
-                                @lang('product.manages_packages_help')
+                                Calcula el peso teórico de cada pieza usando
+                                el peso por unidad y su medida.
                             </i>
                         </p>
                     </div>
@@ -307,49 +339,7 @@
                 <div class="clearfix"></div>
                 <!--custom fields-->
                 <div class="clearfix"></div>
-                <div class="col-sm-3">
-                    <div class="form-group">
-                        {!! Form::label('product_custom_field1', __('lang_v1.product_custom_field1') . ':') !!}
-                        {!! Form::text(
-                            'product_custom_field1',
-                            !empty($duplicate_product->product_custom_field1) ? $duplicate_product->product_custom_field1 : null,
-                            ['class' => 'form-control', 'placeholder' => __('lang_v1.product_custom_field1')],
-                        ) !!}
-                    </div>
-                </div>
 
-                <div class="col-sm-3">
-                    <div class="form-group">
-                        {!! Form::label('product_custom_field2', __('lang_v1.product_custom_field2') . ':') !!}
-                        {!! Form::text(
-                            'product_custom_field2',
-                            !empty($duplicate_product->product_custom_field2) ? $duplicate_product->product_custom_field2 : null,
-                            ['class' => 'form-control', 'placeholder' => __('lang_v1.product_custom_field2')],
-                        ) !!}
-                    </div>
-                </div>
-
-                <div class="col-sm-3">
-                    <div class="form-group">
-                        {!! Form::label('product_custom_field3', __('lang_v1.product_custom_field3') . ':') !!}
-                        {!! Form::text(
-                            'product_custom_field3',
-                            !empty($duplicate_product->product_custom_field3) ? $duplicate_product->product_custom_field3 : null,
-                            ['class' => 'form-control', 'placeholder' => __('lang_v1.product_custom_field3')],
-                        ) !!}
-                    </div>
-                </div>
-
-                <div class="col-sm-3">
-                    <div class="form-group">
-                        {!! Form::label('product_custom_field4', __('lang_v1.product_custom_field4') . ':') !!}
-                        {!! Form::text(
-                            'product_custom_field4',
-                            !empty($duplicate_product->product_custom_field4) ? $duplicate_product->product_custom_field4 : null,
-                            ['class' => 'form-control', 'placeholder' => __('lang_v1.product_custom_field4')],
-                        ) !!}
-                    </div>
-                </div>
                 <!--custom fields-->
                 <div class="clearfix"></div>
                 @include('layouts.partials.module_form_part')
@@ -465,6 +455,52 @@
 
     <script>
         $(document).ready(function() {
+
+
+            function updateMeasurementFields() {
+                var type = $('#measurement_type').val();
+                var isSurface = type === 'surface';
+
+                $('#weight_label').text(
+                    isSurface ?
+                    'Peso por metro cuadrado (kg/m²):' :
+                    'Peso por metro lineal (kg/m):'
+                );
+
+                $('#length_label').text(
+                    isSurface ?
+                    'Superficie de la pieza (m²):' :
+                    'Largo de la pieza (m):'
+                );
+
+                $('#weight').attr(
+                    'placeholder',
+                    isSurface ?
+                    'Ej: 5,60' :
+                    'Ej: 2,23'
+                );
+
+                $('#length').attr(
+                    'placeholder',
+                    isSurface ?
+                    'Ej: 2,97 o 4,50' :
+                    'Ej: 6 o 12'
+                );
+
+                $('#measurement_help').text(
+                    isSurface ?
+                    'Peso de la pieza = kg/m² × superficie.' :
+                    'Peso de la pieza = kg/m × largo.'
+                );
+            }
+
+            $(document).on(
+                'change',
+                '#measurement_type',
+                updateMeasurementFields
+            );
+
+            updateMeasurementFields();
 
             /**
              * Lee un número utilizando las funciones originales

@@ -390,87 +390,240 @@ class ProductController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(ProductStoreRequest $request) //Testeado
+    public function store(ProductStoreRequest $request) // Testeado
     {
         if (!auth()->user()->can('product.create')) {
             abort(403, 'Unauthorized action.');
         }
 
         try {
-            $business_id = $request->session()->get('user.business_id');
-            $form_fields = ['name', 'brand_id', 'unit_id', 'category_id', 'tax', 'type', 'barcode_type', 'sku', 'alert_quantity', 'tax_type', 'weight', 'manages_packages', 'product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4', 'product_description', 'hasMayorista',];
+            $business_id = $request
+                ->session()
+                ->get('user.business_id');
 
-            $module_form_fields = $this->moduleUtil->getModuleFormField('product_form_fields');
+            /*
+         * Campos generales del producto.
+         *
+         * Se eliminaron los cuatro campos personalizados
+         * porque ya no están presentes en el formulario.
+         */
+            $form_fields = [
+                'name',
+                'brand_id',
+                'unit_id',
+                'category_id',
+                'tax',
+                'type',
+                'barcode_type',
+                'sku',
+                'alert_quantity',
+                'tax_type',
+
+                'weight',
+                'length',
+                'measurement_type',
+                'manages_packages',
+
+                'product_description',
+                'hasMayorista',
+            ];
+
+            /*
+         * Agrega campos proporcionados por módulos externos.
+         */
+            $module_form_fields = $this->moduleUtil
+                ->getModuleFormField('product_form_fields');
+
             if (!empty($module_form_fields)) {
-                $form_fields = array_merge($form_fields, $module_form_fields);
+                $form_fields = array_merge(
+                    $form_fields,
+                    $module_form_fields
+                );
             }
 
             $product_details = $request->only($form_fields);
+
+            /*
+         * Determina si el producto maneja piezas.
+         */
             $product_details['manages_packages'] =
                 (int) $request->input('manages_packages', 0) === 1
                 ? 1
                 : 0;
 
+            /*
+         * Tipo de medida:
+         *
+         * linear  = peso por metro lineal
+         * surface = peso por metro cuadrado
+         */
+            $measurement_type = $request->input(
+                'measurement_type',
+                'linear'
+            );
+
+            if (
+                !in_array(
+                    $measurement_type,
+                    ['linear', 'surface'],
+                    true
+                )
+            ) {
+                $measurement_type = 'linear';
+            }
+
+            $product_details['measurement_type'] =
+                $measurement_type;
+
+            /*
+         * Por defecto no se guarda peso ni medida cuando
+         * el producto no maneja piezas.
+         */
             $product_details['weight'] = null;
+            $product_details['length'] = null;
 
+            /*
+         * Procesa peso y medida de la pieza.
+         */
             if ($product_details['manages_packages'] === 1) {
-                $weightPerPackage = $this->productUtil->num_uf(
-                    $request->input('weight')
-                );
+                $weight_per_measure =
+                    $this->productUtil->num_uf(
+                        $request->input('weight')
+                    );
 
-                if ($weightPerPackage <= 0) {
+                $piece_measure =
+                    $this->productUtil->num_uf(
+                        $request->input('length')
+                    );
+
+                if ($weight_per_measure <= 0) {
                     return redirect()
                         ->back()
                         ->withInput()
                         ->withErrors([
-                            'weight' => __('product.weight_per_package_required'),
+                            'weight' =>
+                            'Debes ingresar el peso por unidad de medida.',
                         ]);
                 }
 
-                $product_details['weight'] = $weightPerPackage;
+                if ($piece_measure <= 0) {
+                    return redirect()
+                        ->back()
+                        ->withInput()
+                        ->withErrors([
+                            'length' =>
+                            'Debes ingresar el largo o la superficie de la pieza.',
+                        ]);
+                }
+
+                $product_details['weight'] =
+                    $weight_per_measure;
+
+                $product_details['length'] =
+                    $piece_measure;
             }
-            $product_details['business_id'] = $business_id;
-            $product_details['created_by'] = $request->session()->get('user.id');
 
-            $product_details['enable_stock'] = (!empty($request->input('enable_stock')) &&  $request->input('enable_stock') == 1) ? 1 : 0;
-            $product_details['alert_quantity'] = !empty($product_details['alert_quantity']) ? $product_details['alert_quantity'] : 0;
+            /*
+         * IMEI o número de serie queda desactivado.
+         */
+            $product_details['enable_sr_no'] = 0;
 
+            /*
+         * Datos internos del negocio y usuario.
+         */
+            $product_details['business_id'] =
+                $business_id;
+
+            $product_details['created_by'] = $request
+                ->session()
+                ->get('user.id');
+
+            /*
+         * Manejo de stock.
+         */
+            $product_details['enable_stock'] =
+                !empty($request->input('enable_stock')) &&
+                $request->input('enable_stock') == 1
+                ? 1
+                : 0;
+
+            $product_details['alert_quantity'] =
+                !empty($product_details['alert_quantity'])
+                ? $product_details['alert_quantity']
+                : 0;
+
+            /*
+         * Subcategoría.
+         */
             if (!empty($request->input('sub_category_id'))) {
-                $product_details['sub_category_id'] = $request->input('sub_category_id');
+                $product_details['sub_category_id'] =
+                    $request->input('sub_category_id');
             }
 
+            /*
+         * SKU temporal hasta poder generar uno automático.
+         */
             if (empty($product_details['sku'])) {
                 $product_details['sku'] = ' ';
             }
 
-            $expiry_enabled = $request->session()->get('business.enable_product_expiry');
-            if (!empty($request->input('expiry_period_type')) && !empty($request->input('expiry_period')) && !empty($expiry_enabled) && ($product_details['enable_stock'] == 1)) {
-                $product_details['expiry_period_type'] = $request->input('expiry_period_type');
-                $product_details['expiry_period'] = $this->productUtil->num_uf($request->input('expiry_period'));
+            /*
+         * Vencimiento del producto.
+         */
+            $expiry_enabled = $request
+                ->session()
+                ->get('business.enable_product_expiry');
+
+            if (
+                !empty($request->input('expiry_period_type')) &&
+                !empty($request->input('expiry_period')) &&
+                !empty($expiry_enabled) &&
+                $product_details['enable_stock'] == 1
+            ) {
+                $product_details['expiry_period_type'] =
+                    $request->input('expiry_period_type');
+
+                $product_details['expiry_period'] =
+                    $this->productUtil->num_uf(
+                        $request->input('expiry_period')
+                    );
             }
 
-            if (!empty($request->input('enable_sr_no')) &&  $request->input('enable_sr_no') == 1) {
-                $product_details['enable_sr_no'] = 1;
-            }
-
-            //upload document
-            $product_details['image'] = $this->productUtil->uploadFile($request, 'image', config('constants.product_img_path'));
+            /*
+         * Imagen del producto.
+         */
+            $product_details['image'] =
+                $this->productUtil->uploadFile(
+                    $request,
+                    'image',
+                    config('constants.product_img_path')
+                );
 
             DB::beginTransaction();
 
+            /*
+         * Crear producto.
+         */
             $product = Product::create($product_details);
 
+            /*
+         * Generar SKU automático.
+         */
             if (empty(trim($request->input('sku')))) {
-                $sku = $this->productUtil->generateProductSku($product->id);
+                $sku = $this->productUtil
+                    ->generateProductSku($product->id);
+
                 $product->sku = $sku;
                 $product->save();
             }
 
+            /*
+         * Producto simple.
+         */
             if ($product->type == 'single') {
                 /*
-     * Primero se crea la variación usando la lógica original
-     * del sistema.
-     */
+             * Crea la variación usando la lógica original.
+             */
                 $this->productUtil->createSingleProductVariation(
                     $product->id,
                     $product->sku,
@@ -484,95 +637,158 @@ class ProductController extends Controller
                 );
 
                 /*
-     * Determina si el producto utiliza un precio base en USD.
-     */
-                $purchasePriceInUsd =
-                    !empty($request->input('purchase_price_in_usd')) &&
-                    $request->input('purchase_price_in_usd') == 1;
+             * Determina si utiliza precio base en USD.
+             */
+                $purchase_price_in_usd =
+                    !empty($request->input(
+                            'purchase_price_in_usd'
+                        )) &&
+                    $request->input(
+                        'purchase_price_in_usd'
+                    ) == 1;
 
                 /*
-     * Obtiene la variación recién creada.
-     */
-                $variation = Variation::where('product_id', $product->id)
+             * Obtiene la variación recién creada.
+             */
+                $variation = Variation::where(
+                    'product_id',
+                    $product->id
+                )
                     ->whereNull('deleted_at')
                     ->firstOrFail();
 
-                if ($purchasePriceInUsd) {
-                    $defaultPurchasePriceUsd = $this->productUtil->num_uf(
-                        $request->input('single_dpp_usd')
-                    );
+                if ($purchase_price_in_usd) {
+                    $default_purchase_price_usd =
+                        $this->productUtil->num_uf(
+                            $request->input(
+                                'single_dpp_usd'
+                            )
+                        );
 
-                    if ($defaultPurchasePriceUsd <= 0) {
+                    if ($default_purchase_price_usd <= 0) {
                         throw new \InvalidArgumentException(
                             'El precio de compra en dólares debe ser mayor que cero.'
                         );
                     }
 
                     $variation->default_purchase_price_usd =
-                        $defaultPurchasePriceUsd;
+                        $default_purchase_price_usd;
                 } else {
                     /*
-         * Al usar el modo tradicional en pesos, se guarda NULL.
-         * Así el futuro Job no actualizará esta variación.
-         */
-                    $variation->default_purchase_price_usd = null;
+                 * En el modo tradicional en pesos se guarda NULL.
+                 */
+                    $variation->default_purchase_price_usd =
+                        null;
                 }
 
                 $variation->save();
             } elseif ($product->type == 'variable') {
-                if (!empty($request->input('product_variation'))) {
-                    $input_variations = $request->input(
-                        'product_variation'
-                    );
+                /*
+             * Producto variable.
+             */
+                if (
+                    !empty($request->input(
+                            'product_variation'
+                        ))
+                ) {
+                    $input_variations =
+                        $request->input(
+                            'product_variation'
+                        );
 
-                    $this->productUtil->createVariableProductVariations(
-                        $product->id,
-                        $input_variations
-                    );
+                    $this->productUtil
+                        ->createVariableProductVariations(
+                            $product->id,
+                            $input_variations
+                        );
                 }
             }
 
-            //Add product racks details.
-            $product_racks = $request->get('product_racks', null);
+            /*
+         * Detalles de rack, fila y posición.
+         */
+            $product_racks = $request->get(
+                'product_racks',
+                null
+            );
+
             if (!empty($product_racks)) {
-                $this->productUtil->addRackDetails($business_id, $product->id, $product_racks);
+                $this->productUtil->addRackDetails(
+                    $business_id,
+                    $product->id,
+                    $product_racks
+                );
             }
 
             DB::commit();
+
             $output = [
                 'success' => 1,
-                'msg' => __('product.product_added_success')
+                'msg' => __('product.product_added_success'),
             ];
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+
+            Log::emergency(
+                'File:' . $e->getFile() .
+                    ' Line:' . $e->getLine() .
+                    ' Message:' . $e->getMessage()
+            );
 
             $output = [
                 'success' => 0,
-                'msg' => __("messages.something_went_wrong")
+                'msg' => __('messages.something_went_wrong'),
             ];
-            return redirect('products')->with('status', $output);
+
+            return redirect('products')
+                ->with('status', $output);
         }
 
-        if ($request->input('submit_type') == 'submit_n_add_opening_stock') {
+        /*
+     * Guardar y agregar stock de apertura.
+     */
+        if (
+            $request->input('submit_type') ==
+            'submit_n_add_opening_stock'
+        ) {
             return redirect()->action(
                 'OpeningStockController@add',
-                ['product_id' => $product->id]
+                [
+                    'product_id' => $product->id,
+                ]
             );
-        } elseif ($request->input('submit_type') == 'submit_n_add_selling_prices') {
-            return redirect()->action(
-                'ProductController@addSellingPrices',
-                [$product->id]
-            );
-        } elseif ($request->input('submit_type') == 'save_n_add_another') {
-            return redirect()->action(
-                'ProductController@create'
-            )->with('status', $output);
         }
 
-        return redirect('products')->with('status', $output);
-    }
+        /*
+     * Guardar y agregar precios de grupos.
+     */
+        if (
+            $request->input('submit_type') ==
+            'submit_n_add_selling_prices'
+        ) {
+            return redirect()->action(
+                'ProductController@addSellingPrices',
+                [
+                    $product->id,
+                ]
+            );
+        }
 
+        /*
+     * Guardar y crear otro producto.
+     */
+        if (
+            $request->input('submit_type') ==
+            'save_n_add_another'
+        ) {
+            return redirect()
+                ->action('ProductController@create')
+                ->with('status', $output);
+        }
+
+        return redirect('products')
+            ->with('status', $output);
+    }
     /**
      * Display the specified resource.
      *
@@ -750,20 +966,6 @@ class ProductController extends Controller
             $product->manages_packages =
                 $product_details['manages_packages'];
 
-            $product->product_custom_field1 =
-                $product_details['product_custom_field1'];
-
-            $product->product_custom_field2 =
-                $product_details['product_custom_field2'];
-
-            $product->product_custom_field3 =
-                $product_details['product_custom_field3'];
-
-            $product->product_custom_field4 =
-                $product_details['product_custom_field4'];
-
-            $product->product_description =
-                $product_details['product_description'];
 
             /*
          * Precio mayorista.
@@ -824,6 +1026,11 @@ class ProductController extends Controller
                     $product->expiry_period = null;
                 }
             }
+
+            $product->length = $this->productUtil->num_uf(
+                $request->input('length')
+            );
+
 
             /*
          * Número de serie o IMEI.
@@ -1520,13 +1727,12 @@ class ProductController extends Controller
                 'sku',
                 'alert_quantity',
                 'tax_type',
+
                 'weight',
                 'length',
+                'measurement_type',
                 'manages_packages',
-                'product_custom_field1',
-                'product_custom_field2',
-                'product_custom_field3',
-                'product_custom_field4',
+
                 'product_description',
                 'hasMayorista',
             ];
