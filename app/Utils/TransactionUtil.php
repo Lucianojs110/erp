@@ -319,8 +319,15 @@ class TransactionUtil extends Util
      *
      * @return boolean
      */
-    public function updateSellTransaction($transaction_id, $business_id, $input, $invoice_total, $user_id, $uf_data = true, $change_invoice_number = true)
-    {
+    public function updateSellTransaction(
+        $transaction_id,
+        $business_id,
+        $input,
+        $invoice_total,
+        $user_id,
+        $uf_data = true,
+        $change_invoice_number = true
+    ) {
         $transaction = $transaction_id;
 
         if (!is_object($transaction)) {
@@ -329,43 +336,149 @@ class TransactionUtil extends Util
                 ->firstOrFail();
         }
 
-        //Update invoice number if changed from draft to finalize or vice-versa
+        // Actualizar número de comprobante si cambia de borrador a final o viceversa.
         $invoice_no = $transaction->invoice_no;
-        if ($transaction->status != $input['status'] && $change_invoice_number) {
-            $invoice_no = $this->getInvoiceNumber($business_id, $input['status'], $transaction->location_id);
+
+        if (
+            $transaction->status != $input['status'] &&
+            $change_invoice_number
+        ) {
+            $invoice_no = $this->getInvoiceNumber(
+                $business_id,
+                $input['status'],
+                $transaction->location_id
+            );
         }
+
+        /*
+     * Cargos de envío normalizados.
+     */
+        $shipping_charges = isset($input['shipping_charges'])
+            ? (
+                $uf_data
+                ? $this->num_uf($input['shipping_charges'])
+                : $input['shipping_charges']
+            )
+            : 0;
+
+        /*
+     * Primero intenta usar el total enviado por el POS.
+     */
+        $final_total = $uf_data
+            ? $this->num_uf($input['final_total'] ?? 0)
+            : ($input['final_total'] ?? 0);
+
+        /*
+     * Si el POS lo envió vacío o en cero, usa el total
+     * calculado en el backend por calculateInvoiceTotal().
+     */
+        if ((float) $final_total <= 0) {
+            $final_total = (float) ($invoice_total['final_total'] ?? 0);
+
+            /*
+         * calculateInvoiceTotal() no agrega los cargos de envío,
+         * por eso se suman aquí.
+         */
+            $final_total += (float) $shipping_charges;
+        }
+
+        $final_total = round((float) $final_total, 2);
 
         $update_date = [
             'status' => $input['status'],
             'invoice_no' => $invoice_no,
             'contact_id' => $input['contact_id'],
-            'customer_group_id' => $input['customer_group_id'],
-            'total_before_tax' => $invoice_total['total_before_tax'],
-            'tax_id' => $input['tax_rate_id'],
-            'discount_type' => $input['discount_type'],
-            'discount_amount' => $uf_data ? $this->num_uf($input['discount_amount']) : $input['discount_amount'],
-            'tax_amount' => $invoice_total['tax'],
-            'final_total' => $uf_data ? $this->num_uf($input['final_total']) : $input['final_total'],
-            'additional_notes' => !empty($input['sale_note']) ? $input['sale_note'] : null,
-            'staff_note' => !empty($input['staff_note']) ? $input['staff_note'] : null,
-            'commission_agent' => $input['commission_agent'],
-            'is_quotation' => isset($input['is_quotation']) ? $input['is_quotation'] : 0,
-            'shipping_details' => isset($input['shipping_details']) ? $input['shipping_details'] : null,
-            'shipping_charges' => isset($input['shipping_charges']) ? $uf_data ? $this->num_uf($input['shipping_charges']) : $input['shipping_charges'] : 0,
-            'exchange_rate' => !empty($input['exchange_rate']) ?
-                $uf_data ? $this->num_uf($input['exchange_rate']) : $input['exchange_rate'] : 1,
-            'selling_price_group_id' => isset($input['selling_price_group_id']) ? $input['selling_price_group_id'] : null,
-            'pay_term_number' => isset($input['pay_term_number']) ? $input['pay_term_number'] : null,
-            'pay_term_type' => isset($input['pay_term_type']) ? $input['pay_term_type'] : null,
-            'is_suspend' => !empty($input['is_suspend']) ? 1 : 0,
-            'is_recurring' => !empty($input['is_recurring']) ? $input['is_recurring'] : 0,
-            'recur_interval' => !empty($input['recur_interval']) ? $input['recur_interval'] : null,
-            'recur_interval_type' => !empty($input['recur_interval_type']) ? $input['recur_interval_type'] : null,
-            'recur_repetitions' => !empty($input['recur_repetitions']) ? $input['recur_repetitions'] : 0,
-            'order_addresses' => !empty($input['order_addresses']) ? $input['order_addresses'] : null,
-            'iva10' => $uf_data ? $this->num_uf($input['iva10']) : $input['iva10'],
-            'iva21' => $uf_data ? $this->num_uf($input['iva21']) : $input['iva21'],
-            'iva27' => $uf_data ? $this->num_uf($input['iva27']) : $input['iva27'],
+            'customer_group_id' => $input['customer_group_id'] ?? null,
+
+            'total_before_tax' => $invoice_total['total_before_tax'] ?? 0,
+
+            'tax_id' => $input['tax_rate_id'] ?? null,
+            'discount_type' => $input['discount_type'] ?? 'fixed',
+
+            'discount_amount' => $uf_data
+                ? $this->num_uf($input['discount_amount'] ?? 0)
+                : ($input['discount_amount'] ?? 0),
+
+            'tax_amount' => $invoice_total['tax'] ?? 0,
+            'final_total' => $final_total,
+
+            'additional_notes' => !empty($input['sale_note'])
+                ? $input['sale_note']
+                : null,
+
+            'staff_note' => !empty($input['staff_note'])
+                ? $input['staff_note']
+                : null,
+
+            'commission_agent' => $input['commission_agent'] ?? null,
+
+            'is_quotation' => isset($input['is_quotation'])
+                ? $input['is_quotation']
+                : 0,
+
+            'shipping_details' => isset($input['shipping_details'])
+                ? $input['shipping_details']
+                : null,
+
+            'shipping_charges' => $shipping_charges,
+
+            'exchange_rate' => !empty($input['exchange_rate'])
+                ? (
+                    $uf_data
+                    ? $this->num_uf($input['exchange_rate'])
+                    : $input['exchange_rate']
+                )
+                : 1,
+
+            'selling_price_group_id' => isset(
+                $input['selling_price_group_id']
+            )
+                ? $input['selling_price_group_id']
+                : null,
+
+            'pay_term_number' => isset($input['pay_term_number'])
+                ? $input['pay_term_number']
+                : null,
+
+            'pay_term_type' => isset($input['pay_term_type'])
+                ? $input['pay_term_type']
+                : null,
+
+            'is_suspend' => !empty($input['is_suspend'])
+                ? 1
+                : 0,
+
+            'is_recurring' => !empty($input['is_recurring'])
+                ? $input['is_recurring']
+                : 0,
+
+            'recur_interval' => !empty($input['recur_interval'])
+                ? $input['recur_interval']
+                : null,
+
+            'recur_interval_type' => !empty($input['recur_interval_type'])
+                ? $input['recur_interval_type']
+                : null,
+
+            'recur_repetitions' => !empty($input['recur_repetitions'])
+                ? $input['recur_repetitions']
+                : 0,
+
+            'order_addresses' => !empty($input['order_addresses'])
+                ? $input['order_addresses']
+                : null,
+
+            'iva10' => $uf_data
+                ? $this->num_uf($input['iva10'] ?? 0)
+                : ($input['iva10'] ?? 0),
+
+            'iva21' => $uf_data
+                ? $this->num_uf($input['iva21'] ?? 0)
+                : ($input['iva21'] ?? 0),
+
+            'iva27' => $uf_data
+                ? $this->num_uf($input['iva27'] ?? 0)
+                : ($input['iva27'] ?? 0),
         ];
 
         if (!empty($input['transaction_date'])) {
@@ -373,7 +486,7 @@ class TransactionUtil extends Util
         }
 
         $transaction->fill($update_date);
-        $transaction->update();
+        $transaction->save();
 
         return $transaction;
     }

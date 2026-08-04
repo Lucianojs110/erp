@@ -1176,6 +1176,8 @@ class SellPosController extends Controller
 
                 $transaction = $this->transactionUtil->updateSellTransaction($id, $business_id, $input, $invoice_total, $user_id);
 
+                $input['final_total'] = $transaction->final_total;
+
                 if ($input['payment'][0]['method_cheque'] === 'cheque') {
                     DB::table('cheques')->insert([
                         'number' => $request->payment[0]['cheque_number'],
