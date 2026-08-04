@@ -583,10 +583,6 @@ class SellPosController extends Controller
 
 
 
-                if ($request->status != 'quotation' && $request->has('registrar')) {
-
-                    $afip =   $this->registroAfip($transaction->id);
-                }
 
                 Log::info('Usuario: ' . Auth::user()->id . ' transacción (venta): ' . $transaction);
 
@@ -652,8 +648,36 @@ class SellPosController extends Controller
 
                 DB::commit();
 
+                /*
+ * La venta, el pago, la caja y el stock ya quedaron guardados.
+ * AFIP se procesa fuera de la transacción principal.
+ */
+                $afip_error = null;
+
+                if (
+                    $request->status != 'quotation' &&
+                    $request->has('registrar')
+                ) {
+                    try {
+                        $this->registroAfip($transaction->id);
+
+                        // Recargar CAE, vencimiento y número AFIP.
+                        $transaction->refresh();
+                    } catch (\Throwable $e) {
+                        Log::error(
+                            'AFIP/ARCA no pudo emitir el comprobante. ' .
+                                'Transacción: ' . $transaction->id . '. ' .
+                                'Error: ' . $e->getMessage()
+                        );
+
+                        $afip_error = 'La venta y el pago fueron guardados correctamente, pero AFIP/ARCA no está disponible. Intenta emitir el comprobante nuevamente más tarde.';
+                    }
+                }
+
                 $msg = '';
                 $receipt = '';
+
+
                 if ($input['status'] == 'draft' && $input['is_quotation'] == 0) {
                     $msg = trans("sale.draft_added");
                 } elseif ($input['status'] == 'draft' && $input['is_quotation'] == 1) {
@@ -668,7 +692,6 @@ class SellPosController extends Controller
                         $msg = trans("sale.pos_sale_added");
                         if (!$is_direct_sale) {
                             $receipt = $this->receiptContent($business_id, $input['location_id'], $transaction->id, $transaction_detail);
-                            $receipt = $this->receiptContent($business_id, $input['location_id'], $transaction->id, $transaction_detail);
                         } else {
                             $receipt = '';
                         }
@@ -677,8 +700,15 @@ class SellPosController extends Controller
                         $receipt = '';
                     }
                 }
-
-                $output = ['success' => 1, 'msg' => $msg, 'receipt' => $receipt];
+                if (!empty($afip_error)) {
+                    $msg .= ' ' . $afip_error;
+                }
+                $output = [
+                    'success' => 1,
+                    'msg' => $msg,
+                    'receipt' => $receipt,
+                    'afip_error' => !empty($afip_error),
+                ];
             } else {
 
 
