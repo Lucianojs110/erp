@@ -82,7 +82,8 @@
             <br>
             <b>Condicion frente al IVA: </b> {{ $receipt_details->tax_label_1 }}
             @if (!empty($receipt_details->afip_start_date))
-                <b>Fecha inicio de actividades: </b> {{ $receipt_details->afip_start_date }}
+                <b>Fecha inicio de actividades: </b>
+                {{ date('d/m/Y', strtotime($receipt_details->afip_start_date)) }}
             @endif
         </p>
 
@@ -491,7 +492,7 @@
                 </tr>
             @endif
 
-          
+
 
             <!-- Shipping Charges -->
             @if (!empty($receipt_details->shipping_charges))
@@ -513,16 +514,15 @@
 
 
             <!-- Total -->
-            @if ($receipt_details->is_quotation == 1)
-                <tr>
-                    <th>
-                        {!! $receipt_details->total_label !!}
-                    </th>
-                    <td>
-                        {{ $receipt_details->total }}
-                    </td>
-                </tr>
-            @endif
+            <!-- Total -->
+            <tr style="border-top: 2px solid #000;">
+                <th style="font-size: 16px;">
+                    <b>{!! $receipt_details->total_label ?? 'TOTAL' !!}</b>
+                </th>
+                <td style="font-size: 16px;">
+                    <b>{{ $receipt_details->total }}</b>
+                </td>
+            </tr>
             </tbody>
         </table>
     </div>
@@ -552,7 +552,7 @@
     <div class="row">
         <div class="col-xs-12">
             <b>CAE:</b> {!! $receipt_details->cae !!} <br>
-            <b>Vto:</b> {{ $newDate = date('d-m-Y', strtotime($receipt_details->exp_cae)) }}
+            <b>Vto:</b> {{ date('d/m/Y', strtotime($receipt_details->exp_cae)) }}
         </div>
     </div>
     <div class="row">
