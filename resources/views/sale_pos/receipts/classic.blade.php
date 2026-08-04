@@ -513,7 +513,7 @@
             @endif
 
 
-            <!-- Total -->
+
             <!-- Total -->
             <tr style="border-top: 2px solid #000;">
                 <th style="font-size: 16px;">

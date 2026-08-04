@@ -41,13 +41,167 @@ class TransactionUtil extends Util
      *
      * @return boolean|object
      */
-    public function createSellTransaction($business_id, $input, $invoice_total, $user_id, $carries_a_bag, $uf_data = true)
-    {
 
-        if (!empty($input['pos_token']) && Transaction::where('pos_token', $input['pos_token'])->exists()) {
-            throw new \Exception('Esta venta ya fue registrada (token duplicado).');
+
+
+    private function resolveFinalTotal($input, $invoice_total, $uf_data = true)
+    {
+        $toNumber = function ($value) use ($uf_data) {
+            return $uf_data
+                ? (float) $this->num_uf($value ?? 0)
+                : (float) ($value ?? 0);
+        };
+
+        $final_total = $toNumber($input['final_total'] ?? 0);
+
+        // Si el frontend envió un total válido, se conserva.
+        if ($final_total > 0) {
+            return round($final_total, 2);
         }
-        $invoice_no = !empty($input['invoice_no']) ? $input['invoice_no'] : $this->getInvoiceNumber($business_id, $input['status'], $input['location_id']);
+
+        // Las columnas iva21, iva10 e iva27 contienen los importes netos.
+        $neto21 = $toNumber($input['iva21'] ?? 0);
+        $neto10 = $toNumber($input['iva10'] ?? 0);
+        $neto27 = $toNumber($input['iva27'] ?? 0);
+
+        $iva21 = round($neto21 * 0.21, 2);
+        $iva10 = round($neto10 * 0.105, 2);
+        $iva27 = round($neto27 * 0.27, 2);
+
+        $impuestos = (float) ($invoice_total['tax'] ?? 0);
+        $envio = $toNumber($input['shipping_charges'] ?? 0);
+
+        return round(
+            $neto21 +
+                $neto10 +
+                $neto27 +
+                $iva21 +
+                $iva10 +
+                $iva27 +
+                $impuestos +
+                $envio,
+            2
+        );
+    }
+
+
+    public function createSellTransaction(
+        $business_id,
+        $input,
+        $invoice_total,
+        $user_id,
+        $carries_a_bag,
+        $uf_data = true
+    ) {
+        if (
+            !empty($input['pos_token']) &&
+            Transaction::where('pos_token', $input['pos_token'])->exists()
+        ) {
+            throw new \Exception(
+                'Esta venta ya fue registrada (token duplicado).'
+            );
+        }
+
+        $invoice_no = !empty($input['invoice_no'])
+            ? $input['invoice_no']
+            : $this->getInvoiceNumber(
+                $business_id,
+                $input['status'],
+                $input['location_id']
+            );
+
+        /*
+     * Convierte los valores recibidos al formato numérico interno.
+     */
+        $toNumber = function ($value) use ($uf_data) {
+            if ($uf_data) {
+                return (float) $this->num_uf($value ?? 0);
+            }
+
+            return (float) ($value ?? 0);
+        };
+
+        /*
+     * Primero se intenta utilizar el total calculado por el POS.
+     */
+        $final_total = $toNumber($input['final_total'] ?? 0);
+
+        /*
+     * Si el POS envía el total en cero, se reconstruye.
+     */
+        if ($final_total <= 0) {
+            $neto_iva21 = $toNumber($input['iva21'] ?? 0);
+            $neto_iva10 = $toNumber($input['iva10'] ?? 0);
+            $neto_iva27 = $toNumber($input['iva27'] ?? 0);
+
+            $total_neto = round(
+                $neto_iva21 +
+                    $neto_iva10 +
+                    $neto_iva27,
+                2
+            );
+
+            $importe_iva21 = round($neto_iva21 * 0.21, 2);
+            $importe_iva10 = round($neto_iva10 * 0.105, 2);
+            $importe_iva27 = round($neto_iva27 * 0.27, 2);
+
+            $order_tax = isset($invoice_total['tax'])
+                ? (float) $invoice_total['tax']
+                : 0;
+
+            $shipping_charges = $toNumber(
+                $input['shipping_charges'] ?? 0
+            );
+
+            /*
+         * Para responsables inscriptos o monotributistas,
+         * los campos iva21, iva10 e iva27 contienen las bases
+         * imponibles con el descuento ya aplicado.
+         */
+            if ($total_neto > 0) {
+                $final_total = round(
+                    $total_neto +
+                        $importe_iva21 +
+                        $importe_iva10 +
+                        $importe_iva27 +
+                        $order_tax +
+                        $shipping_charges,
+                    2
+                );
+            } else {
+                /*
+             * Respaldo para ventas donde no existen bases
+             * imponibles separadas.
+             */
+                $price_total = $toNumber(
+                    $input['price_total'] ?? 0
+                );
+
+                $discount_amount = $toNumber(
+                    $input['discount_amount'] ?? 0
+                );
+
+                $discount_type = $input['discount_type'] ?? 'fixed';
+
+                if ($discount_type === 'percentage') {
+                    $discount = round(
+                        $price_total * $discount_amount / 100,
+                        2
+                    );
+                } else {
+                    $discount = $discount_amount;
+                }
+
+                $final_total = round(
+                    $price_total -
+                        $discount +
+                        $order_tax +
+                        $shipping_charges,
+                    2
+                );
+            }
+        }
+
         $transaction = Transaction::create([
             'business_id' => $business_id,
             'location_id' => $input['location_id'],
@@ -57,39 +211,98 @@ class TransactionUtil extends Util
             'customer_group_id' => $input['customer_group_id'],
             'invoice_no' => $invoice_no,
             'ref_no' => '',
-            'total_before_tax' =>  $this->num_uf($input['price_total']),
+            'total_before_tax' => $this->num_uf(
+                $input['price_total']
+            ),
             'transaction_date' => $input['transaction_date'],
             'tax_id' => $input['tax_rate_id'],
             'discount_type' => $input['discount_type'],
-            'discount_amount' => $uf_data ? $this->num_uf($input['discount_amount']) : $input['discount_amount'],
+            'discount_amount' => $uf_data
+                ? $this->num_uf($input['discount_amount'])
+                : $input['discount_amount'],
             'tax_amount' => $invoice_total['tax'],
-            'final_total' => $uf_data ? $this->num_uf($input['final_total']) : $input['final_total'],
-            'additional_notes' => !empty($input['sale_note']) ? $input['sale_note'] : null,
-            'staff_note' => !empty($input['staff_note']) ? $input['staff_note'] : null,
+            'final_total' => $final_total,
+            'additional_notes' => !empty($input['sale_note'])
+                ? $input['sale_note']
+                : null,
+            'staff_note' => !empty($input['staff_note'])
+                ? $input['staff_note']
+                : null,
             'created_by' => $user_id,
-            'is_direct_sale' => !empty($input['is_direct_sale']) ? $input['is_direct_sale'] : 0,
+            'is_direct_sale' => !empty($input['is_direct_sale'])
+                ? $input['is_direct_sale']
+                : 0,
             'commission_agent' => $input['commission_agent'],
-            'is_quotation' => isset($input['is_quotation']) ? $input['is_quotation'] : 0,
-            'shipping_details' => isset($input['shipping_details']) ? $input['shipping_details'] : null,
-            'shipping_charges' => isset($input['shipping_charges']) ? $uf_data ? $this->num_uf($input['shipping_charges']) : $input['shipping_charges'] : 0,
-            'exchange_rate' => !empty($input['exchange_rate']) ?
-                $uf_data ? $this->num_uf($input['exchange_rate']) : $input['exchange_rate'] : 1,
-            'selling_price_group_id' => isset($input['selling_price_group_id']) ? $input['selling_price_group_id'] : null,
-            'pay_term_number' => isset($input['pay_term_number']) ? $input['pay_term_number'] : null,
-            'pay_term_type' => isset($input['pay_term_type']) ? $input['pay_term_type'] : null,
-            'is_suspend' => !empty($input['is_suspend']) ? 1 : 0,
-            'is_recurring' => !empty($input['is_recurring']) ? $input['is_recurring'] : 0,
-            'recur_interval' => !empty($input['recur_interval']) ? $input['recur_interval'] : null,
-            'recur_interval_type' => !empty($input['recur_interval_type']) ? $input['recur_interval_type'] : null,
-            'subscription_no' => !empty($input['subscription_no']) ? $input['subscription_no'] : null,
-            'recur_repetitions' => !empty($input['recur_repetitions']) ? $input['recur_repetitions'] : 0,
-            'order_addresses' => !empty($input['order_addresses']) ? $input['order_addresses'] : null,
-            'sub_type' => !empty($input['sub_type']) ? $input['sub_type'] : null,
-            'iva10' => $uf_data ? $this->num_uf($input['iva10']) : $input['iva10'],
-            'iva21' => $uf_data ? $this->num_uf($input['iva21']) : $input['iva21'],
-            'iva27' => $uf_data ? $this->num_uf($input['iva27']) : $input['iva27'],
-            'carries_a_bag' => $carries_a_bag == 1 ? 1 : 0,
-            'pos_token' => isset($input['pos_token']) ? $input['pos_token'] : null
+            'is_quotation' => isset($input['is_quotation'])
+                ? $input['is_quotation']
+                : 0,
+            'shipping_details' => isset($input['shipping_details'])
+                ? $input['shipping_details']
+                : null,
+            'shipping_charges' => isset($input['shipping_charges'])
+                ? (
+                    $uf_data
+                    ? $this->num_uf($input['shipping_charges'])
+                    : $input['shipping_charges']
+                )
+                : 0,
+            'exchange_rate' => !empty($input['exchange_rate'])
+                ? (
+                    $uf_data
+                    ? $this->num_uf($input['exchange_rate'])
+                    : $input['exchange_rate']
+                )
+                : 1,
+            'selling_price_group_id' => isset(
+                $input['selling_price_group_id']
+            )
+                ? $input['selling_price_group_id']
+                : null,
+            'pay_term_number' => isset($input['pay_term_number'])
+                ? $input['pay_term_number']
+                : null,
+            'pay_term_type' => isset($input['pay_term_type'])
+                ? $input['pay_term_type']
+                : null,
+            'is_suspend' => !empty($input['is_suspend'])
+                ? 1
+                : 0,
+            'is_recurring' => !empty($input['is_recurring'])
+                ? $input['is_recurring']
+                : 0,
+            'recur_interval' => !empty($input['recur_interval'])
+                ? $input['recur_interval']
+                : null,
+            'recur_interval_type' => !empty($input['recur_interval_type'])
+                ? $input['recur_interval_type']
+                : null,
+            'subscription_no' => !empty($input['subscription_no'])
+                ? $input['subscription_no']
+                : null,
+            'recur_repetitions' => !empty($input['recur_repetitions'])
+                ? $input['recur_repetitions']
+                : 0,
+            'order_addresses' => !empty($input['order_addresses'])
+                ? $input['order_addresses']
+                : null,
+            'sub_type' => !empty($input['sub_type'])
+                ? $input['sub_type']
+                : null,
+            'iva10' => $uf_data
+                ? $this->num_uf($input['iva10'] ?? 0)
+                : ($input['iva10'] ?? 0),
+            'iva21' => $uf_data
+                ? $this->num_uf($input['iva21'] ?? 0)
+                : ($input['iva21'] ?? 0),
+            'iva27' => $uf_data
+                ? $this->num_uf($input['iva27'] ?? 0)
+                : ($input['iva27'] ?? 0),
+            'carries_a_bag' => $carries_a_bag == 1
+                ? 1
+                : 0,
+            'pos_token' => isset($input['pos_token'])
+                ? $input['pos_token']
+                : null,
         ]);
 
         return $transaction;
