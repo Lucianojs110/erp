@@ -482,6 +482,41 @@ class SellPosController extends Controller
                 $carries_a_bag =  $request->input('carries_a_bag') ? 1 : 0;
                 $transaction = $this->transactionUtil->createSellTransaction($business_id, $input, $invoice_total, $user_id, $carries_a_bag);
 
+                // Sincronizar el pago con el total corregido de la venta.
+                if (!empty($input['payment'][0])) {
+                    $payment = &$input['payment'][0];
+
+                    $is_cash =
+                        ($payment['method'] ?? null) === 'cash' ||
+                        ($payment['method_cash'] ?? null) === '1' ||
+                        ($payment['method_cash'] ?? null) === 1 ||
+                        ($payment['method_cash'] ?? null) === 'cash';
+
+                    $is_card =
+                        ($payment['method'] ?? null) === 'card' ||
+                        ($payment['method_card'] ?? null) === 'card';
+
+                    $is_cheque =
+                        ($payment['method'] ?? null) === 'cheque' ||
+                        ($payment['method_cheque'] ?? null) === 'cheque';
+
+                    if ($is_cash) {
+                        $payment['method'] = 'cash';
+                        $payment['amount'] = $transaction->final_total;
+                    } elseif ($is_card) {
+                        $payment['method'] = 'card';
+                        $payment['amount'] = $transaction->final_total;
+                    } elseif ($is_cheque) {
+                        $payment['method'] = 'cheque';
+
+                        if (empty($payment['amount'])) {
+                            $payment['amount'] = $transaction->final_total;
+                        }
+                    }
+
+                    unset($payment);
+                }
+
                 if ($request->input('selected_withholdings') != '' && $request->input('selected_withholding_type') != 0) {
                     $total_neto = (float) str_replace(',', '', $request->input('total_without_tax'));
                     foreach ($request->input('selected_withholdings') as $withholding) {
@@ -1178,6 +1213,7 @@ class SellPosController extends Controller
 
                 $input['final_total'] = $transaction->final_total;
 
+
                 if ($input['payment'][0]['method_cheque'] === 'cheque') {
                     DB::table('cheques')->insert([
                         'number' => $request->payment[0]['cheque_number'],
@@ -1226,15 +1262,38 @@ class SellPosController extends Controller
                 }
                 */
                 //\Log::emergency($input['payment']);
-                if (!$is_direct_sale) {
-                    //Add change return
-                    $change_return = $this->dummyPaymentLine;
-                    $change_return['amount'] = $input['change_return'];
-                    $change_return['is_return'] = 1;
-                    //$input['payment'][] = $change_return;
-                    if ($input['payment'][0]['method_cash'] == '1' or $input['payment'][0]['method_card'] == 'card' or $input['payment'][0]['method_cheque'] == 'cheque') {
-                        $input['payment'][0]['amount'] = $input['final_total'];
+                if (!empty($input['payment'][0])) {
+                    $payment = &$input['payment'][0];
+
+                    $is_cash =
+                        ($payment['method'] ?? null) === 'cash' ||
+                        ($payment['method_cash'] ?? null) === '1' ||
+                        ($payment['method_cash'] ?? null) === 1 ||
+                        ($payment['method_cash'] ?? null) === 'cash';
+
+                    $is_card =
+                        ($payment['method'] ?? null) === 'card' ||
+                        ($payment['method_card'] ?? null) === 'card';
+
+                    $is_cheque =
+                        ($payment['method'] ?? null) === 'cheque' ||
+                        ($payment['method_cheque'] ?? null) === 'cheque';
+
+                    if ($is_cash) {
+                        $payment['method'] = 'cash';
+                        $payment['amount'] = $transaction->final_total;
+                    } elseif ($is_card) {
+                        $payment['method'] = 'card';
+                        $payment['amount'] = $transaction->final_total;
+                    } elseif ($is_cheque) {
+                        $payment['method'] = 'cheque';
+
+                        if (empty($payment['amount'])) {
+                            $payment['amount'] = $transaction->final_total;
+                        }
                     }
+
+                    unset($payment);
                 }
 
                 $this->transactionUtil->createOrUpdatePaymentLines($transaction, $input['payment']);
