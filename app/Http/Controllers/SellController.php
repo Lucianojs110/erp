@@ -52,8 +52,25 @@ class SellController extends Controller
         $this->productUtil = $productUtil;
 
         $this->dummyPaymentLine = [
-            'method' => 'cash', 'amount' => 0, 'note' => '', 'card_transaction_number' => '', 'card_number' => '', 'card_type' => '', 'card_holder_name' => '', 'card_month' => '', 'card_year' => '', 'card_security' => '', 'cheque_number' => '', 'cheque_bank' => '', 'cheque_type' => '', 'cheque_issue_date' => '', 'cheque_deferral_date' => '', 'cheque_amount' => '', 'bank_account_number' => '',
-            'is_return' => 0, 'transaction_no' => ''
+            'method' => 'cash',
+            'amount' => 0,
+            'note' => '',
+            'card_transaction_number' => '',
+            'card_number' => '',
+            'card_type' => '',
+            'card_holder_name' => '',
+            'card_month' => '',
+            'card_year' => '',
+            'card_security' => '',
+            'cheque_number' => '',
+            'cheque_bank' => '',
+            'cheque_type' => '',
+            'cheque_issue_date' => '',
+            'cheque_deferral_date' => '',
+            'cheque_amount' => '',
+            'bank_account_number' => '',
+            'is_return' => 0,
+            'transaction_no' => ''
         ];
     }
 
@@ -80,9 +97,13 @@ class SellController extends Controller
                 ->leftJoin('cash_registers as cr', 'crt.cash_register_id', '=', 'cr.id')
                 ->leftJoin('users as u', 'cr.user_id', '=', 'u.id')
                 //->leftJoin('transaction_payments as tp', 'transactions.id', '=', 'tp.transaction_id')
-                ->leftJoin(DB::raw('(SELECT transaction_id, SUM(IF(is_return = 1,-1*amount,amount)) as total_paid 
-                                    FROM transaction_payments GROUP BY transaction_id) as tp'), 
-                                    'transactions.id', '=', 'tp.transaction_id')
+                ->leftJoin(
+                    DB::raw('(SELECT transaction_id, SUM(IF(is_return = 1,-1*amount,amount)) as total_paid 
+                                    FROM transaction_payments GROUP BY transaction_id) as tp'),
+                    'transactions.id',
+                    '=',
+                    'tp.transaction_id'
+                )
                 ->join(
                     'business_locations AS bl',
                     'transactions.location_id',
@@ -157,7 +178,7 @@ class SellController extends Controller
                 $sells->where('transactions.payment_status', request()->input('payment_status'));
             }
 
-           // Log::debug(request()->input());
+            // Log::debug(request()->input());
 
             if (!empty(request()->input('filtro_factura'))) {
                 $sells->where('transactions.type_invoice', request()->input('filtro_factura'));
@@ -186,7 +207,7 @@ class SellController extends Controller
                 $sells->where('contacts.id', $customer_id);
             }
 
-            
+
             if (!empty(request()->start_date) && !empty(request()->end_date)) {
                 $start = request()->start_date;
                 $end =  request()->end_date;
@@ -419,7 +440,7 @@ class SellController extends Controller
                     }
                 ]);
 
-            $rawColumns = ['final_total','crname', 'crt.cash_register_id','u_id', 'action', 'total_paid', 'total_remaining', 'cr_user','payment_status', 'invoice_no', 'discount_amount', 'tax_amount', 'total_before_tax'];
+            $rawColumns = ['final_total', 'crname', 'crt.cash_register_id', 'u_id', 'action', 'total_paid', 'total_remaining', 'cr_user', 'payment_status', 'invoice_no', 'discount_amount', 'tax_amount', 'total_before_tax'];
 
             return $datatable->rawColumns($rawColumns)
                 ->make(true);
@@ -497,9 +518,9 @@ class SellController extends Controller
 
         $default_datetime = $this->businessUtil->format_date('now', true);
 
-        $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings,true);
-        if(empty($pos_settings["carries_a_bag"])){
-            $pos_settings["carries_a_bag"]=0;   
+        $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
+        if (empty($pos_settings["carries_a_bag"])) {
+            $pos_settings["carries_a_bag"] = 0;
         }
         return view('sell.create')
             ->with(compact(
@@ -1062,12 +1083,12 @@ class SellController extends Controller
             $ImpNeto = number_format((float)$ImpNeto, 2, '.', '');
         }
 
-      
+
 
         $certPath = base_path($business_locations->url_cert);
         $keyPath = base_path($business_locations->url_key);
 
-        $options = [                   
+        $options = [
             'CUIT' => $business_locations->cuit,
             'production' => True,
             'cert' => $certPath,
@@ -1075,6 +1096,43 @@ class SellController extends Controller
         ];
 
         $afip = new Afip($options);
+
+        // Validar el CUIT del cliente antes de registrar la factura
+        if ($sell->contact->id != 1) {
+            $cuitCliente = preg_replace(
+                '/\D/',
+                '',
+                (string) $sell->contact->tax_number
+            );
+
+            if (strlen($cuitCliente) !== 11) {
+                return response()->json([
+                    'message' => 'El CUIT del cliente es inválido. Debe contener 11 números.',
+                ], 422);
+            }
+
+            try {
+                $persona = $afip
+                    ->RegisterScopeThirteen
+                    ->GetTaxpayerDetails($cuitCliente);
+
+                if (empty($persona)) {
+                    return response()->json([
+                        'message' => 'El CUIT del cliente no se encuentra registrado en AFIP.',
+                    ], 422);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('CUIT inválido al registrar factura en AFIP', [
+                    'sell_id' => $sell->id,
+                    'cuit' => $cuitCliente,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return response()->json([
+                    'message' => 'El CUIT del cliente es inválido o no se encuentra registrado en AFIP.',
+                ], 422);
+            }
+        }
         $last_voucher = $afip->ElectronicBilling->GetLastVoucher($punto_venta, $CbteTipo);
         $numComp = $last_voucher + 1;
 
@@ -1082,11 +1140,7 @@ class SellController extends Controller
         $date2 = $date->format('Ymd');
         $dateqr = $date->format('Y-m-d');
 
-        if ($sell->contact->id == 1) {
-            $doctipo = 99;
-        } else {
-            $doctipo = 80;
-        }
+
 
         if ($business_locations->tax_label_1 == 'MONOTRIBUTO') {
 
@@ -1240,7 +1294,7 @@ class SellController extends Controller
         // Formatear el número de factura de AFIP
         $sell->num_invoice_afip = str_pad($punto_venta, 4, "0", STR_PAD_LEFT) . '-' . str_pad($num_fac, 8, "0", STR_PAD_LEFT);
 
-       
+
         // Preparar los datos para el QR
         $data = [
             'ver' => 1,  // Versión del formato QR
