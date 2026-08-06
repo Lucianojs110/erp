@@ -1097,10 +1097,15 @@ class SellController extends Controller
 
         $afip = new Afip($options);
 
-        // Validar el CUIT del cliente antes de registrar la factura
-        if ($sell->contact->id != 1) {
+        // Preparar tipo y número de documento del receptor
+        $doctipo = 99;
+        $docNro = 0;
+
+        // El contacto con ID 1 se considera consumidor final
+        if ((int) $sell->contact->id !== 1) {
+
             $cuitCliente = preg_replace(
-                '/\D/',
+                '/\D+/',
                 '',
                 (string) $sell->contact->tax_number
             );
@@ -1110,6 +1115,10 @@ class SellController extends Controller
                     'message' => 'El CUIT del cliente es inválido. Debe contener 11 números.',
                 ], 422);
             }
+
+            // 80 = CUIT
+            $doctipo = 80;
+            $docNro = $cuitCliente;
 
             try {
                 $persona = $afip
@@ -1133,6 +1142,7 @@ class SellController extends Controller
                 ], 422);
             }
         }
+
         $last_voucher = $afip->ElectronicBilling->GetLastVoucher($punto_venta, $CbteTipo);
         $numComp = $last_voucher + 1;
 
@@ -1151,7 +1161,7 @@ class SellController extends Controller
                 'CbteTipo'     => 11,  // Tipo de comprobante (ver tipos disponibles) 
                 'Concepto'     => 1,  // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
                 'DocTipo'     => $doctipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
-                'DocNro'     => intval($sell->contact->tax_number),  // Número de documento del comprador (0 consumidor final)
+                'DocNro' => (int) $docNro,
                 'CbteDesde'     => $numComp,  // Número de comprobante o numero del primer comprobante en caso de ser mas de uno
                 'CbteHasta'     => $numComp,  // Número de comprobante o numero del último comprobante en caso de ser mas de uno
                 'CbteFch'         => intval($date2), // (Opcional) Fecha del comprobante (yyyymmdd) o fecha actual si es nulo
@@ -1176,7 +1186,7 @@ class SellController extends Controller
                     'CbteTipo'     => $CbteTipo,  // Tipo de comprobante (ver tipos disponibles) 
                     'Concepto'     => 1,  // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
                     'DocTipo'     => $doctipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
-                    'DocNro'     => intval($sell->contact->tax_number),  // Número de documento del comprador (0 consumidor final)
+                    'DocNro' => (int) $docNro,
                     'CbteDesde'     => $numComp,  // Número de comprobante o numero del primer comprobante en caso de ser mas de uno
                     'CbteHasta'     => $numComp,  // Número de comprobante o numero del último comprobante en caso de ser mas de uno
                     'CbteFch'         => intval($date2), // (Opcional) Fecha del comprobante (yyyymmdd) o fecha actual si es nulo
@@ -1216,7 +1226,7 @@ class SellController extends Controller
                     'CbteTipo'     => $CbteTipo,  // Tipo de comprobante (ver tipos disponibles) 
                     'Concepto'     => 1,  // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
                     'DocTipo'     => $doctipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
-                    'DocNro'     => intval($sell->contact->tax_number),  // Número de documento del comprador (0 consumidor final)
+                    'DocNro' => (int) $docNro,
                     'CbteDesde'     => $numComp,  // Número de comprobante o numero del primer comprobante en caso de ser mas de uno
                     'CbteHasta'     => $numComp,  // Número de comprobante o numero del último comprobante en caso de ser mas de uno
                     'CbteFch'         => intval($date2), // (Opcional) Fecha del comprobante (yyyymmdd) o fecha actual si es nulo
@@ -1253,7 +1263,7 @@ class SellController extends Controller
                     'CbteTipo'     => $CbteTipo,  // Tipo de comprobante (ver tipos disponibles) 
                     'Concepto'     => 1,  // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
                     'DocTipo'     => $doctipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
-                    'DocNro'     => intval($sell->contact->tax_number),  // Número de documento del comprador (0 consumidor final)
+                    'DocNro' => (int) $docNro,
                     'CbteDesde'     => $numComp,  // Número de comprobante o numero del primer comprobante en caso de ser mas de uno
                     'CbteHasta'     => $numComp,  // Número de comprobante o numero del último comprobante en caso de ser mas de uno
                     'CbteFch'         => intval($date2), // (Opcional) Fecha del comprobante (yyyymmdd) o fecha actual si es nulo
