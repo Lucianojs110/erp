@@ -193,7 +193,12 @@ class ContactController extends Controller
             )
             ->addColumn(
                 'due',
-                '<span class="display_currency contact_due" data-orig-value="{{$total_invoice - $invoice_received}}" data-currency_symbol=true data-highlight=true>{{($total_invoice - $invoice_received)}}</span>'
+                '<span class="display_currency contact_due" 
+data-orig-value="{{max(0, $total_invoice - $invoice_received + $sell_return_paid)}}" 
+data-currency_symbol=true 
+data-highlight=true>
+{{max(0, $total_invoice - $invoice_received + $sell_return_paid)}}
+</span>'
             )
             ->addColumn(
                 'return_due',
@@ -726,7 +731,7 @@ class ContactController extends Controller
                     ->skipRows(1)
                     ->get()
                     ->toArray();
-                    
+
                 $business_id = $request->session()->get('user.business_id');
                 $user_id = $request->session()->get('user.id');
 
