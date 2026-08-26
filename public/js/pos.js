@@ -1,22 +1,15 @@
+function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
 $(document).ready(function () {
 
 
-    function uuidv4() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
 
-    function ensurePosToken() {
-        let $form = pos_form_obj;
-        let $token = $form.find('input[name="pos_token"]');
-        if ($token.length === 0) {
-            $form.append('<input type="hidden" name="pos_token" value="' + uuidv4() + '">');
-        } else {
-            $token.val(uuidv4());
-        }
-    }
+
+
 
 
 
@@ -2041,6 +2034,35 @@ function reset_pos_form() {
     check_nostock_product_added();
 
     $(document).trigger('sell_form_reset');
+
+    generatePosToken();
+}
+
+function generatePosToken() {
+    let $form = pos_form_obj;
+    let $token = $form.find('input[name="pos_token"]');
+    let token = uuidv4();
+
+    if ($token.length === 0) {
+        $form.append(
+            '<input type="hidden" name="pos_token" value="' + token + '">'
+        );
+    } else {
+        $token.val(token);
+    }
+
+    return token;
+}
+
+function ensurePosToken() {
+    let $form = pos_form_obj;
+    let $token = $form.find('input[name="pos_token"]');
+
+    if ($token.length === 0 || !$token.val()) {
+        return generatePosToken();
+    }
+
+    return $token.val();
 }
 
 function set_default_customer() {
