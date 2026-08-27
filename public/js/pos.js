@@ -230,13 +230,9 @@ $(document).ready(function () {
                         $(this).autocomplete('close');
                     }
                 } else if (ui.content.length === 0) {
-                    toastr.error(LANG.no_products_found);
-
-                    const typedTerm = globalThis.term1 || $(this).val();
-
-                    $(this)
-                        .val(typedTerm)
-                        .focus();
+                    // No encontró productos:
+                    // mantener exactamente lo que escribió el usuario
+                    $(this).val(globalThis.term1);
                 }
             },
 
