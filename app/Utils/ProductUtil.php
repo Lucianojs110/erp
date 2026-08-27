@@ -738,35 +738,71 @@ class ProductUtil extends Util
      */
     public function updateProductFromPurchase($variation_data)
     {
-
         $variation_details = Variation::where('id', $variation_data['variation_id'])
             ->with(['product', 'product.product_tax'])
             ->first();
-        //dd($variation_details);                                
+
         $tax_rate = 0;
+
         if (!empty($variation_details->product->product_tax->amount)) {
             $tax_rate = $variation_details->product->product_tax->amount;
         }
 
-        if (($variation_details->default_purchase_price != $variation_data['pp_without_discount']) ||
-            ($variation_details->default_sell_price != $variation_data['default_sell_price'])
+        $new_purchase_price = $variation_data['pp_without_discount'];
+        $new_sell_price = $variation_data['default_sell_price'];
+
+        $new_purchase_price_usd = isset($variation_data['default_purchase_price_usd'])
+            ? $variation_data['default_purchase_price_usd']
+            : $variation_details->default_purchase_price_usd;
+
+        $new_precio_mayorista = isset($variation_data['precioMayorista'])
+            ? $variation_data['precioMayorista']
+            : 0;
+
+        if (
+            $variation_details->default_purchase_price != $new_purchase_price ||
+            $variation_details->default_sell_price != $new_sell_price ||
+            $variation_details->default_purchase_price_usd != $new_purchase_price_usd ||
+            $variation_details->precioMayorista != $new_precio_mayorista
         ) {
-            //Set default purchase price exc. tax
-            $variation_details->default_purchase_price = $variation_data['pp_without_discount'];
+            // Precio de compra sin IVA
+            $variation_details->default_purchase_price =
+                $new_purchase_price;
 
-            //Set default purchase price inc. tax
-            $variation_details->dpp_inc_tax = $this->calc_percentage($variation_details->default_purchase_price, $tax_rate, $variation_details->default_purchase_price);
+            // Precio de compra con IVA
+            $variation_details->dpp_inc_tax =
+                $this->calc_percentage(
+                    $variation_details->default_purchase_price,
+                    $tax_rate,
+                    $variation_details->default_purchase_price
+                );
 
-            //Set default sell price exc. tax
-            $variation_details->default_sell_price = $variation_data['default_sell_price'];
+            // Precio de venta sin IVA
+            $variation_details->default_sell_price =
+                $new_sell_price;
 
-            $variation_details->precioMayorista = $variation_data['precioMayorista'];
+            // Precio de compra/base USD
+            $variation_details->default_purchase_price_usd =
+                $new_purchase_price_usd;
 
-            //set profit margin
-            $variation_details->profit_percent = $this->get_percent($variation_details->default_purchase_price, $variation_details->default_sell_price);
+            // Precio mayorista
+            $variation_details->precioMayorista =
+                $new_precio_mayorista;
 
-            //set sell price inc. tax
-            $variation_details->sell_price_inc_tax = $this->calc_percentage($variation_details->default_sell_price, $tax_rate, $variation_details->default_sell_price);
+            // Margen
+            $variation_details->profit_percent =
+                $this->get_percent(
+                    $variation_details->default_purchase_price,
+                    $variation_details->default_sell_price
+                );
+
+            // Precio de venta con IVA
+            $variation_details->sell_price_inc_tax =
+                $this->calc_percentage(
+                    $variation_details->default_sell_price,
+                    $tax_rate,
+                    $variation_details->default_sell_price
+                );
 
             $variation_details->save();
         }
@@ -1027,125 +1063,427 @@ class ProductUtil extends Util
      *
      * @return array
      */
-    public function createOrUpdatePurchaseLines($transaction, $input_data, $currency_details, $enable_product_editing, $before_status = null)
-    {
+    public function createOrUpdatePurchaseLines(
+        $transaction,
+        $input_data,
+        $currency_details,
+        $enable_product_editing,
+        $before_status = null
+    ) {
         $updated_purchase_lines = [];
         $updated_purchase_line_ids = [0];
+
         $exchange_rate = $transaction->exchange_rate;
 
+        // Cotización global del dólar de la empresa
+        $business = Business::findOrFail($transaction->business_id);
+
+        $usd_exchange_rate = !empty($business->usd_exchange_rate)
+            ? (float) $business->usd_exchange_rate
+            : 0;
+
         foreach ($input_data as $data) {
+
             $multiplier = 1;
-            if (isset($data['sub_unit_id']) && $data['sub_unit_id'] == $data['product_unit_id']) {
+
+            if (
+                isset($data['sub_unit_id']) &&
+                $data['sub_unit_id'] == $data['product_unit_id']
+            ) {
                 unset($data['sub_unit_id']);
             }
+
             if (!empty($data['sub_unit_id'])) {
                 $unit = Unit::find($data['sub_unit_id']);
-                $multiplier = !empty($unit->base_unit_multiplier) ? $unit->base_unit_multiplier : 1;
+
+                $multiplier = !empty($unit->base_unit_multiplier)
+                    ? $unit->base_unit_multiplier
+                    : 1;
             }
-            $new_quantity = $this->num_uf($data['quantity']) * $multiplier;
 
-            $new_quantity_f = $this->num_f($new_quantity);
-            //update existing purchase line
+            $new_quantity =
+                $this->num_uf($data['quantity']) * $multiplier;
+
+            $new_quantity_f =
+                $this->num_f($new_quantity);
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | CREAR / ACTUALIZAR LINEA DE COMPRA
+        |--------------------------------------------------------------------------
+        */
+
             if (isset($data['purchase_line_id'])) {
-                $purchase_line = PurchaseLine::findOrFail($data['purchase_line_id']);
-                $updated_purchase_line_ids[] = $purchase_line->id;
-                $old_qty = $this->num_f($purchase_line->quantity);
 
-                //Update quantity for existing products
-                if ($before_status == 'received' && $transaction->status == 'received') {
-                    //if status received update existing quantity
-                    $this->updateProductQuantity($transaction->location_id, $data['product_id'], $data['variation_id'], $new_quantity_f, $old_qty, $currency_details);
-                } elseif ($before_status == 'received' && $transaction->status != 'received') {
-                    //decrease quantity only if status changed from received to not received
+                $purchase_line =
+                    PurchaseLine::findOrFail(
+                        $data['purchase_line_id']
+                    );
+
+                $updated_purchase_line_ids[] =
+                    $purchase_line->id;
+
+                $old_qty =
+                    $this->num_f(
+                        $purchase_line->quantity
+                    );
+
+
+                if (
+                    $before_status == 'received' &&
+                    $transaction->status == 'received'
+                ) {
+
+                    $this->updateProductQuantity(
+                        $transaction->location_id,
+                        $data['product_id'],
+                        $data['variation_id'],
+                        $new_quantity_f,
+                        $old_qty,
+                        $currency_details
+                    );
+                } elseif (
+                    $before_status == 'received' &&
+                    $transaction->status != 'received'
+                ) {
+
                     $this->decreaseProductQuantity(
                         $data['product_id'],
                         $data['variation_id'],
                         $transaction->location_id,
                         $purchase_line->quantity
                     );
-                } elseif ($before_status != 'received' && $transaction->status == 'received') {
-                    $this->updateProductQuantity($transaction->location_id, $data['product_id'], $data['variation_id'], $new_quantity_f, 0, $currency_details);
+                } elseif (
+                    $before_status != 'received' &&
+                    $transaction->status == 'received'
+                ) {
+
+                    $this->updateProductQuantity(
+                        $transaction->location_id,
+                        $data['product_id'],
+                        $data['variation_id'],
+                        $new_quantity_f,
+                        0,
+                        $currency_details
+                    );
                 }
             } else {
-                //create newly added purchase lines
-                $purchase_line = new PurchaseLine();
-                $purchase_line->product_id = $data['product_id'];
-                $purchase_line->variation_id = $data['variation_id'];
 
-                //Increase quantity only if status is received
+                // Nueva línea de compra
+                $purchase_line = new PurchaseLine();
+
+                $purchase_line->product_id =
+                    $data['product_id'];
+
+                $purchase_line->variation_id =
+                    $data['variation_id'];
+
+
                 if ($transaction->status == 'received') {
-                    $this->updateProductQuantity($transaction->location_id, $data['product_id'], $data['variation_id'], $new_quantity_f, 0, $currency_details);
+
+                    $this->updateProductQuantity(
+                        $transaction->location_id,
+                        $data['product_id'],
+                        $data['variation_id'],
+                        $new_quantity_f,
+                        0,
+                        $currency_details
+                    );
                 }
             }
 
-            //Log::debug($data);
-            $iva = ($data['row_tax_amount'] / 100) + 1;
-            $purchase_price_inc_tax = $this->num_uf($data['purchase_price_inc_tax']) * $iva;
-            $purchase_line->quantity = $new_quantity;
-            $purchase_line->pp_without_discount = ($this->num_uf($data['pp_without_discount'], $currency_details) * $exchange_rate) / $multiplier;
-            $purchase_line->discount_percent = $this->num_uf($data['discount_percent'], $currency_details);
-            $purchase_line->purchase_price = ($this->num_uf($data['purchase_price'], $currency_details) * $exchange_rate) / $multiplier;
-            $purchase_line->purchase_price_inc_tax = ($this->num_uf($purchase_price_inc_tax, $currency_details) * $exchange_rate) / $multiplier;
-            $purchase_line->item_tax = ($this->num_uf($data['item_tax'], $currency_details) * $exchange_rate) / $multiplier;
-            $purchase_line->tax_id = $data['purchase_line_tax_id'];
-            $purchase_line->lot_number = !empty($data['lot_number']) ? $data['lot_number'] : null;
-            $purchase_line->mfg_date = !empty($data['mfg_date']) ? $this->uf_date($data['mfg_date']) : null;
-            $purchase_line->exp_date = !empty($data['exp_date']) ? $this->uf_date($data['exp_date']) : null;
-            $purchase_line->sub_unit_id = !empty($data['sub_unit_id']) ? $data['sub_unit_id'] : null;
-            $purchase_line->default_sell_price = ($this->num_uf($data['default_sell_price'], $currency_details)) / $multiplier;
 
-            $updated_purchase_lines[] = $purchase_line;
+            /*
+        |--------------------------------------------------------------------------
+        | PRECIOS DE LA LINEA
+        |--------------------------------------------------------------------------
+        */
 
-            //Edit product price
+            $purchase_line->quantity =
+                $new_quantity;
+
+
+            // Precio antes de descuento
+            $purchase_line->pp_without_discount =
+                (
+                    $this->num_uf(
+                        $data['pp_without_discount'],
+                        $currency_details
+                    ) * $exchange_rate
+                ) / $multiplier;
+
+
+            // Descuento
+            $purchase_line->discount_percent =
+                $this->num_uf(
+                    $data['discount_percent'],
+                    $currency_details
+                );
+
+
+            // Precio compra sin IVA
+            $purchase_line->purchase_price =
+                (
+                    $this->num_uf(
+                        $data['purchase_price'],
+                        $currency_details
+                    ) * $exchange_rate
+                ) / $multiplier;
+
+
+            /*
+         * IMPORTANTE:
+         * purchase_price_inc_tax YA viene con IVA desde purchase.js.
+         * No hay que volver a multiplicarlo por 1.21 / 1.105.
+         */
+            $purchase_price_inc_tax =
+                $this->num_uf(
+                    $data['purchase_price_inc_tax'],
+                    $currency_details
+                );
+
+            $purchase_line->purchase_price_inc_tax =
+                (
+                    $purchase_price_inc_tax *
+                    $exchange_rate
+                ) / $multiplier;
+
+
+            // IVA unitario
+            $purchase_line->item_tax =
+                (
+                    $this->num_uf(
+                        $data['item_tax'],
+                        $currency_details
+                    ) * $exchange_rate
+                ) / $multiplier;
+
+
+            $purchase_line->tax_id =
+                !empty($data['purchase_line_tax_id'])
+                ? $data['purchase_line_tax_id']
+                : null;
+
+
+            $purchase_line->lot_number =
+                !empty($data['lot_number'])
+                ? $data['lot_number']
+                : null;
+
+
+            $purchase_line->mfg_date =
+                !empty($data['mfg_date'])
+                ? $this->uf_date($data['mfg_date'])
+                : null;
+
+
+            $purchase_line->exp_date =
+                !empty($data['exp_date'])
+                ? $this->uf_date($data['exp_date'])
+                : null;
+
+
+            $purchase_line->sub_unit_id =
+                !empty($data['sub_unit_id'])
+                ? $data['sub_unit_id']
+                : null;
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | PRECIO DE VENTA
+        |--------------------------------------------------------------------------
+        |
+        | Este valor viene del formulario como precio final.
+        |
+        */
+
+            $default_sell_price =
+                $this->num_uf(
+                    $data['default_sell_price'],
+                    $currency_details
+                ) / $multiplier;
+
+
+            $purchase_line->default_sell_price =
+                $default_sell_price;
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | PRECIO BASE USD
+        |--------------------------------------------------------------------------
+        |
+        | Según lo que definimos:
+        |
+        | precio base USD = precio de venta / cotización global USD
+        |
+        */
+
+            $default_purchase_price_usd = 0;
+
+
+
+            if ($usd_exchange_rate > 0) {
+                $default_purchase_price_usd =
+                    $purchase_line->purchase_price / $usd_exchange_rate;
+            }
+
+            // Agregar línea para guardar posteriormente
+            $updated_purchase_lines[] =
+                $purchase_line;
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | ACTUALIZAR PRECIOS DEL PRODUCTO
+        |--------------------------------------------------------------------------
+        */
+
             if ($enable_product_editing == 1) {
 
+                $product =
+                    Product::findOrFail(
+                        $data['product_id']
+                    );
 
-                $product = Product::findOrFail($data['product_id']);
+                $variation_data = [];
 
-                if ($product->tax_type == 'inclusive') {
 
-                    $tax_rate = TaxRate::findOrFail($product->tax);
-                    $tax_rate =  $tax_rate->amount;
-                    $tax_rate = $tax_rate / 100;
-                    $tax_rate =  $tax_rate + 1;
-                    //Log::debug('tax amount. '. $tax_rate);
-                    //Log::debug('default_sell_price. '. $data['default_sell_price']);
-                    $default_sell_price = $this->num_uf($data['default_sell_price']) / $tax_rate;
-                    //Log::debug('precio. '. $default_sell_price);
-                    $variation_data['default_sell_price'] = ($this->num_uf($default_sell_price, $currency_details)) / $multiplier;
+                /*
+             * default_sell_price en variations se guarda SIN IVA
+             * cuando el producto tiene impuesto incluido.
+             */
+                if (
+                    $product->tax_type == 'inclusive' &&
+                    !empty($product->tax)
+                ) {
+
+                    $tax =
+                        TaxRate::findOrFail(
+                            $product->tax
+                        );
+
+                    $tax_multiplier =
+                        1 + ((float) $tax->amount / 100);
+
+
+                    $default_sell_price_without_tax =
+                        $this->num_uf(
+                            $data['default_sell_price'],
+                            $currency_details
+                        ) / $tax_multiplier;
+
+
+                    $variation_data['default_sell_price'] =
+                        $default_sell_price_without_tax /
+                        $multiplier;
                 } else {
-                    $variation_data['default_sell_price'] = ($this->num_uf($data['default_sell_price'], $currency_details)) / $multiplier;
+
+                    $variation_data['default_sell_price'] =
+                        $this->num_uf(
+                            $data['default_sell_price'],
+                            $currency_details
+                        ) / $multiplier;
                 }
 
-                //$variation_data['default_sell_price'] = ($this->num_uf($data['default_sell_price'], $currency_details)) / $multiplier;
-                $variation_data['pp_without_discount'] = ($this->num_uf($data['pp_without_discount'], $currency_details) * $exchange_rate) / $multiplier;
-                $variation_data['variation_id'] = $purchase_line->variation_id;
-                $variation_data['purchase_price'] = $purchase_line->purchase_price;
-                if (!empty($variation_data['precioMayorista'])) {
-                    $variation_data['precioMayorista'] = ($this->num_uf($data['precioMayorista']));
+
+                /*
+             * Precio compra antes de descuento
+             */
+                $variation_data['pp_without_discount'] =
+                    (
+                        $this->num_uf(
+                            $data['pp_without_discount'],
+                            $currency_details
+                        ) * $exchange_rate
+                    ) / $multiplier;
+
+
+                $variation_data['variation_id'] =
+                    $purchase_line->variation_id;
+
+
+                /*
+             * Precio compra neto
+             */
+                $variation_data['purchase_price'] =
+                    $purchase_line->purchase_price;
+
+
+                /*
+             * NUEVO:
+             * Precio base USD calculado con
+             * precio venta / cotización dólar.
+             */
+                $variation_data['default_purchase_price_usd'] =
+                    $default_purchase_price_usd;
+
+
+                /*
+             * Precio mayorista
+             */
+                if (!empty($data['precioMayorista'])) {
+
+                    $variation_data['precioMayorista'] =
+                        $this->num_uf(
+                            $data['precioMayorista'],
+                            $currency_details
+                        );
                 } else {
+
                     $variation_data['precioMayorista'] = 0;
                 }
 
 
-                $this->updateProductFromPurchase($variation_data);
+                /*
+             * Actualizar variation
+             */
+                $this->updateProductFromPurchase(
+                    $variation_data
+                );
             }
         }
 
-        //unset deleted purchase lines
+
+        /*
+    |--------------------------------------------------------------------------
+    | ELIMINAR LINEAS BORRADAS
+    |--------------------------------------------------------------------------
+    */
+
         $delete_purchase_line_ids = [];
         $delete_purchase_lines = null;
+
+
         if (!empty($updated_purchase_line_ids)) {
-            $delete_purchase_lines = PurchaseLine::where('transaction_id', $transaction->id)
-                ->whereNotIn('id', $updated_purchase_line_ids)
+
+            $delete_purchase_lines =
+                PurchaseLine::where(
+                    'transaction_id',
+                    $transaction->id
+                )
+                ->whereNotIn(
+                    'id',
+                    $updated_purchase_line_ids
+                )
                 ->get();
 
-            if ($delete_purchase_lines->count()) {
-                foreach ($delete_purchase_lines as $delete_purchase_line) {
-                    $delete_purchase_line_ids[] = $delete_purchase_line->id;
 
-                    //decrease deleted only if previous status was received
+            if ($delete_purchase_lines->count()) {
+
+                foreach (
+                    $delete_purchase_lines
+                    as $delete_purchase_line
+                ) {
+
+                    $delete_purchase_line_ids[] =
+                        $delete_purchase_line->id;
+
+
                     if ($before_status == 'received') {
+
                         $this->decreaseProductQuantity(
                             $delete_purchase_line->product_id,
                             $delete_purchase_line->variation_id,
@@ -1154,17 +1492,36 @@ class ProductUtil extends Util
                         );
                     }
                 }
-                //Delete deleted purchase lines
-                PurchaseLine::where('transaction_id', $transaction->id)
-                    ->whereIn('id', $delete_purchase_line_ids)
+
+
+                PurchaseLine::where(
+                    'transaction_id',
+                    $transaction->id
+                )
+                    ->whereIn(
+                        'id',
+                        $delete_purchase_line_ids
+                    )
                     ->delete();
             }
         }
 
-        //update purchase lines
+
+        /*
+    |--------------------------------------------------------------------------
+    | GUARDAR LINEAS
+    |--------------------------------------------------------------------------
+    */
+
         if (!empty($updated_purchase_lines)) {
-            $transaction->purchase_lines()->saveMany($updated_purchase_lines);
+
+            $transaction
+                ->purchase_lines()
+                ->saveMany(
+                    $updated_purchase_lines
+                );
         }
+
 
         return $delete_purchase_lines;
     }
