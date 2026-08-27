@@ -1,4 +1,4 @@
-$(document).ready(function() {
+$(document).ready(function () {
     if ($('input#iraqi_selling_price_adjustment').length > 0) {
         iraqi_selling_price_adjustment = true;
     } else {
@@ -17,23 +17,23 @@ $(document).ready(function() {
             url: '/purchases/get_suppliers',
             dataType: 'json',
             delay: 250,
-            data: function(params) {
+            data: function (params) {
                 return {
                     q: params.term, // search term
                     page: params.page,
                 };
             },
-            processResults: function(data) {
+            processResults: function (data) {
                 return {
                     results: data,
                 };
             },
         },
         minimumInputLength: 1,
-        escapeMarkup: function(m) {
+        escapeMarkup: function (m) {
             return m;
         },
-        templateResult: function(data) {
+        templateResult: function (data) {
             if (!data.id) {
                 return data.text;
             }
@@ -41,7 +41,7 @@ $(document).ready(function() {
             return html;
         },
         language: {
-            noResults: function() {
+            noResults: function () {
                 var name = $('#supplier_id')
                     .data('select2')
                     .dropdown.$search.val();
@@ -57,7 +57,7 @@ $(document).ready(function() {
     });
 
     //Quick add supplier
-    $(document).on('click', '.add_new_supplier', function() {
+    $(document).on('click', '.add_new_supplier', function () {
         $('#supplier_id').select2('close');
         var name = $(this).data('name');
         $('.contact_modal')
@@ -72,7 +72,7 @@ $(document).ready(function() {
     });
 
     $('form#quick_add_contact')
-        .submit(function(e) {
+        .submit(function (e) {
             e.preventDefault();
         })
         .validate({
@@ -82,10 +82,10 @@ $(document).ready(function() {
                         url: '/contacts/check-contact-id',
                         type: 'post',
                         data: {
-                            contact_id: function() {
+                            contact_id: function () {
                                 return $('#contact_id').val();
                             },
-                            hidden_id: function() {
+                            hidden_id: function () {
                                 if ($('#hidden_id').length) {
                                     return $('#hidden_id').val();
                                 } else {
@@ -101,7 +101,7 @@ $(document).ready(function() {
                     remote: LANG.contact_id_already_exists,
                 },
             },
-            submitHandler: function(form) {
+            submitHandler: function (form) {
                 $(form)
                     .find('button[type="submit"]')
                     .attr('disabled', true);
@@ -111,7 +111,7 @@ $(document).ready(function() {
                     url: $(form).attr('action'),
                     dataType: 'json',
                     data: data,
-                    success: function(result) {
+                    success: function (result) {
                         if (result.success == true) {
                             $('select#supplier_id').append(
                                 $('<option>', { value: result.data.id, text: result.data.name })
@@ -128,7 +128,7 @@ $(document).ready(function() {
                 });
             },
         });
-    $('.contact_modal').on('hidden.bs.modal', function() {
+    $('.contact_modal').on('hidden.bs.modal', function () {
         $('form#quick_add_contact')
             .find('button[type="submit"]')
             .removeAttr('disabled');
@@ -141,7 +141,7 @@ $(document).ready(function() {
             .autocomplete({
                 source: '/purchases/get_products',
                 minLength: 2,
-                response: function(event, ui) {
+                response: function (event, ui) {
                     if (ui.content.length == 1) {
                         ui.item = ui.content[0];
                         $(this)
@@ -160,7 +160,7 @@ $(document).ready(function() {
                                 $.ajax({
                                     url: '/products/quick_add?product_name=' + term,
                                     dataType: 'html',
-                                    success: function(result) {
+                                    success: function (result) {
                                         $(container)
                                             .html(result)
                                             .modal('show');
@@ -170,19 +170,19 @@ $(document).ready(function() {
                         });
                     }
                 },
-                select: function(event, ui) {
+                select: function (event, ui) {
                     $(this).val(null);
                     get_purchase_entry_row(ui.item.product_id, ui.item.variation_id);
                 },
             })
-            .autocomplete('instance')._renderItem = function(ul, item) {
-            return $('<li>')
-                .append('<div>' + item.text + '</div>')
-                .appendTo(ul);
-        };
+            .autocomplete('instance')._renderItem = function (ul, item) {
+                return $('<li>')
+                    .append('<div>' + item.text + '</div>')
+                    .appendTo(ul);
+            };
     }
 
-    $(document).on('click', '.remove_purchase_entry_row', function() {
+    $(document).on('click', '.remove_purchase_entry_row', function () {
         swal({
             title: LANG.sure,
             icon: 'warning',
@@ -201,7 +201,7 @@ $(document).ready(function() {
     });
 
     //On Change of quantity
-    $(document).on('change', '.purchase_quantity', function() {
+    $(document).on('change', '.purchase_quantity', function () {
         var row = $(this).closest('tr');
         var quantity = __read_number($(this), true);
         var purchase_before_tax = __read_number(row.find('input.purchase_unit_cost'), true);
@@ -232,7 +232,7 @@ $(document).ready(function() {
         update_grand_total();
     });
 
-    $(document).on('change', '.purchase_unit_cost_without_discount', function() {
+    $(document).on('change', '.purchase_unit_cost_without_discount', function () {
         var purchase_before_discount = __read_number($(this), true);
 
         var row = $(this).closest('tr');
@@ -285,7 +285,7 @@ $(document).ready(function() {
         update_grand_total();
     });
 
-    $(document).on('change', '.inline_discounts', function() {
+    $(document).on('change', '.inline_discounts', function () {
         var row = $(this).closest('tr');
 
         var discount_percent = __read_number($(this), true);
@@ -341,7 +341,7 @@ $(document).ready(function() {
         update_grand_total();
     });
 
-    $(document).on('change', '.purchase_unit_cost', function() {
+    $(document).on('change', '.purchase_unit_cost', function () {
         var row = $(this).closest('tr');
         var quantity = __read_number(row.find('input.purchase_quantity'), true);
         var purchase_before_tax = __read_number($(this), true);
@@ -394,41 +394,78 @@ $(document).ready(function() {
         update_table_total();
         update_grand_total();
     });
-
-    $(document).on('change', 'select.purchase_line_tax_id', function() {
+    $(document).on('change', 'select.purchase_line_tax_id', function () {
         var row = $(this).closest('tr');
-        var purchase_before_tax = __read_number(row.find('.purchase_unit_cost'), true);
-        var quantity = __read_number(row.find('input.purchase_quantity'), true);
 
-        //Tax
+        var purchase_before_tax = __read_number(
+            row.find('.purchase_unit_cost'),
+            true
+        );
+
+        var quantity = __read_number(
+            row.find('input.purchase_quantity'),
+            true
+        );
+
         var tax_rate = parseFloat(
             $(this)
                 .find(':selected')
                 .data('tax_amount')
-        );
-        var tax = __calculate_amount('percentage', tax_rate, purchase_before_tax);
+        ) || 0;
 
-        //Purchase price
-        var purchase_after_tax = purchase_before_tax + tax;
-        var sub_total_after_tax = quantity * purchase_after_tax;
+        // Guardar también el IVA en el hidden
+        row.find('input.row_tax_amount_hidden').val(tax_rate);
+
+        var tax = __calculate_amount(
+            'percentage',
+            tax_rate,
+            purchase_before_tax
+        );
+
+        var purchase_after_tax =
+            purchase_before_tax + tax;
+
+        var sub_total_after_tax =
+            quantity * purchase_after_tax;
 
         row.find('.purchase_product_unit_tax_text').text(
             __currency_trans_from_en(tax, false, true)
         );
-        __write_number(row.find('input.purchase_product_unit_tax'), tax, true);
 
-        __write_number(row.find('input.purchase_unit_cost_after_tax'), purchase_after_tax, true);
+        __write_number(
+            row.find('input.purchase_product_unit_tax'),
+            tax,
+            true
+        );
+
+        __write_number(
+            row.find('input.purchase_unit_cost_after_tax'),
+            purchase_after_tax,
+            true
+        );
 
         row.find('.row_subtotal_after_tax').text(
-            __currency_trans_from_en(sub_total_after_tax, false, true)
+            __currency_trans_from_en(
+                sub_total_after_tax,
+                false,
+                true
+            )
         );
-        __write_number(row.find('input.row_subtotal_after_tax_hidden'), sub_total_after_tax, true);
+
+        __write_number(
+            row.find('input.row_subtotal_after_tax_hidden'),
+            sub_total_after_tax,
+            true
+        );
+
+        // Recalcular precio de venta con el IVA actual
+        row.find('.profit_percent').trigger('change');
 
         update_table_total();
         update_grand_total();
     });
 
-    $(document).on('change', '.purchase_unit_cost_after_tax', function() {
+    $(document).on('change', '.purchase_unit_cost_after_tax', function () {
         var row = $(this).closest('tr');
         var purchase_after_tax = __read_number($(this), true);
         var quantity = __read_number(row.find('input.purchase_quantity'), true);
@@ -478,7 +515,7 @@ $(document).ready(function() {
         update_grand_total();
     });
 
-    $('#tax_id, #discount_type, #discount_amount, input#shipping_charges').change(function() {
+    $('#tax_id, #discount_type, #discount_amount, input#shipping_charges').change(function () {
         update_grand_total();
     });
 
@@ -489,7 +526,7 @@ $(document).ready(function() {
         aaSorting: [[0, 'desc']],
         ajax: {
             url: '/purchases',
-            data: function(d) {
+            data: function (d) {
                 if ($('#purchase_list_filter_location_id').length) {
                     d.location_id = $('#purchase_list_filter_location_id').val();
                 }
@@ -535,7 +572,7 @@ $(document).ready(function() {
             { data: 'payment_due', name: 'payment_due' },
             { data: 'action', name: 'action' },
         ],
-        fnDrawCallback: function(oSettings) {
+        fnDrawCallback: function (oSettings) {
             var total_purchase = sum_table_col($('#purchase_table'), 'final_total');
             $('#footer_purchase_total').text(total_purchase);
 
@@ -553,7 +590,7 @@ $(document).ready(function() {
 
             __currency_convert_recursively($('#purchase_table'));
         },
-        createdRow: function(row, data, dataIndex) {
+        createdRow: function (row, data, dataIndex) {
             $(row)
                 .find('td:eq(5)')
                 .attr('class', 'clickable_td');
@@ -565,14 +602,14 @@ $(document).ready(function() {
         '#purchase_list_filter_location_id, \
                     #purchase_list_filter_supplier_id, #purchase_list_filter_payment_status,\
                      #purchase_list_filter_status',
-        function() {
+        function () {
             purchase_table.ajax.reload();
         }
     );
 
     update_table_sr_number();
 
-    $(document).on('change', '.mfg_date', function() {
+    $(document).on('change', '.mfg_date', function () {
         var this_date = $(this).val();
         var this_moment = moment(this_date, moment_date_format);
         var expiry_period = parseFloat(
@@ -610,35 +647,64 @@ $(document).ready(function() {
 
     $('#purchase_entry_table tbody')
         .find('.expiry_datepicker')
-        .each(function() {
+        .each(function () {
             $(this).datepicker({
                 autoclose: true,
                 format: datepicker_date_format,
             });
         });
 
-    $(document).on('change', '.profit_percent', function() {
+    $(document).on('change input', '.profit_percent', function () {
         var row = $(this).closest('tr');
+
         var profit_percent = __read_number($(this), true);
 
-        var purchase_unit_cost = __read_number(row.find('input.purchase_unit_cost'), true);
-        var default_sell_price =
-            parseFloat(purchase_unit_cost) +
-            __calculate_amount('percentage', profit_percent, purchase_unit_cost);
-        var exchange_rate = $('input#exchange_rate').val();
+        var purchase_unit_cost = __read_number(
+            row.find('input.purchase_unit_cost'),
+            true
+        );
+
+        var tax_rate = parseFloat(
+            row.find('input.row_tax_amount_hidden').val()
+        ) || 0;
+
+        // Precio de venta SIN IVA, aplicando margen
+        var sell_price_without_tax =
+            purchase_unit_cost +
+            __calculate_amount(
+                'percentage',
+                profit_percent,
+                purchase_unit_cost
+            );
+
+        // IVA sobre precio de venta
+        var tax_amount =
+            __calculate_amount(
+                'percentage',
+                tax_rate,
+                sell_price_without_tax
+            );
+
+        // Precio final CON IVA
+        var sell_price_inc_tax =
+            sell_price_without_tax + tax_amount;
+
+        var exchange_rate =
+            parseFloat($('input#exchange_rate').val()) || 1;
+
         __write_number(
             row.find('input.default_sell_price'),
-            default_sell_price * exchange_rate,
+            sell_price_inc_tax * exchange_rate,
             true
         );
     });
 
-    $(document).on('change', '.default_sell_price', function() {
+    $(document).on('change', '.default_sell_price', function () {
         var row = $(this).closest('tr');
         update_inline_profit_percentage(row);
     });
 
-    $('table#purchase_table tbody').on('click', 'a.delete-purchase', function(e) {
+    $('table#purchase_table tbody').on('click', 'a.delete-purchase', function (e) {
         e.preventDefault();
         swal({
             title: LANG.sure,
@@ -652,7 +718,7 @@ $(document).ready(function() {
                     method: 'DELETE',
                     url: href,
                     dataType: 'json',
-                    success: function(result) {
+                    success: function (result) {
                         if (result.success == true) {
                             toastr.success(result.msg);
                             purchase_table.ajax.reload();
@@ -665,7 +731,7 @@ $(document).ready(function() {
         });
     });
 
-    $('table#purchase_entry_table').on('change', 'select.sub_unit', function() {
+    $('table#purchase_entry_table').on('change', 'select.sub_unit', function () {
         var tr = $(this).closest('tr');
         var base_unit_cost = tr.find('input.base_unit_cost').val();
         var base_unit_selling_price = tr.find('input.base_unit_selling_price').val();
@@ -696,12 +762,12 @@ function get_purchase_entry_row(product_id, variation_id) {
             url: '/purchases/get_purchase_entry_row',
             dataType: 'html',
             data: { product_id: product_id, row_count: row_count, variation_id: variation_id },
-            success: function(result) {
+            success: function (result) {
                 $(result)
                     .find('.purchase_quantity')
-                    .each(function() {
+                    .each(function () {
 
-                      
+
                         row = $(this).closest('tr');
 
                         $('#purchase_entry_table tbody').append(
@@ -748,15 +814,17 @@ function update_purchase_entry_row_values(row) {
         row.find('.purchase_product_unit_tax_text').text(
             __currency_trans_from_en(unit_product_tax, false, true)
         );
-        row.find('.purchase_unit_cost_after_tax').text(
-            __currency_trans_from_en(unit_cost_price_after_tax, true)
+        __write_number(
+            row.find('input.purchase_unit_cost_after_tax'),
+            unit_cost_price_after_tax,
+            true
         );
         row.find('.row_subtotal_after_tax').text(
             __currency_trans_from_en(row_subtotal_after_tax, false, true)
         );
         __write_number(row.find('.row_subtotal_after_tax_hidden'), row_subtotal_after_tax, true);
 
-        row.find('.expiry_datepicker').each(function() {
+        row.find('.expiry_datepicker').each(function () {
             $(this).datepicker({
                 autoclose: true,
                 format: datepicker_date_format,
@@ -839,44 +907,62 @@ function iraqi_dinnar_selling_price_adjustment(row) {
 }
 
 function update_inline_profit_percentage(row) {
-    //Update Profit percentage
-    var default_sell_price = __read_number(row.find('input.default_sell_price'), true);
-    var exchange_rate = $('input#exchange_rate').val();
-    default_sell_price_in_base_currency = default_sell_price / parseFloat(exchange_rate);
+    var default_sell_price = __read_number(
+        row.find('input.default_sell_price'),
+        true
+    );
 
-    var purchase_before_tax = __read_number(row.find('input.purchase_unit_cost'), true);
-    var profit_percent = __get_rate(purchase_before_tax, default_sell_price_in_base_currency);
-    __write_number(row.find('input.profit_percent'), profit_percent, true);
+    var exchange_rate = parseFloat($('input#exchange_rate').val()) || 1;
+
+    var default_sell_price_in_base_currency =
+        default_sell_price / exchange_rate;
+
+    // Costo con IVA
+    var purchase_after_tax = __read_number(
+        row.find('input.purchase_unit_cost_after_tax'),
+        true
+    );
+
+    var profit_percent = __get_rate(
+        purchase_after_tax,
+        default_sell_price_in_base_currency
+    );
+
+    __write_number(
+        row.find('input.profit_percent'),
+        profit_percent,
+        true
+    );
 }
 
 function update_table_total() {
     var total_quantity = 0;
     var total_st_before_tax = 0;
     var total_subtotal = 0;
-    var total_iva = 0; 
+    var total_iva = 0;
     var subtotal_after_tax_21 = 0;
-            var subtotal_after_tax_10 = 0;
+    var subtotal_after_tax_10 = 0;
 
     $('#purchase_entry_table tbody')
         .find('tr')
-        .each(function() {
-            
+        .each(function () {
+
             var quantity = parseFloat(__read_number($(this).find('.purchase_quantity'), true));
             var subtotal_before_tax = parseFloat(__read_number($(this).find('.row_subtotal_before_tax_hidden'), true));
             var porcentaje_iva = parseFloat($(this).find('.row_tax_amount_hidden').val());
-            
+
 
             // Calcula el subtotal después de aplicar el porcentaje de IVA
             var subtotal_after_tax = subtotal_before_tax * (1 + (porcentaje_iva / 100));
 
-            
-            if(porcentaje_iva == 21.00){
-                 subtotal_after_tax_21 += subtotal_before_tax ;
-            }else if(porcentaje_iva == 10.50){
-                 subtotal_after_tax_10 += subtotal_before_tax ;
+
+            if (porcentaje_iva == 21.00) {
+                subtotal_after_tax_21 += subtotal_before_tax;
+            } else if (porcentaje_iva == 10.50) {
+                subtotal_after_tax_10 += subtotal_before_tax;
             }
 
-         
+
             // Suma los valores a los totales
             total_quantity += quantity;
             total_st_before_tax += subtotal_before_tax;
@@ -885,7 +971,7 @@ function update_table_total() {
             // Suma el IVA al total del IVA
             total_iva += (subtotal_after_tax - subtotal_before_tax);
             //console.log("IVA: " + subtotal_before_tax);
-        
+
             $('#tax_calculated_amount').text(__currency_trans_from_en(total_iva.toFixed(2), true, true));
         });
 
@@ -901,7 +987,7 @@ function update_table_total() {
     __write_number($('input#iva10'), subtotal_after_tax_10, true);
 }
 
-$(document).on('change', 'select#selected_withholdings', function() {
+$(document).on('change', 'select#selected_withholdings', function () {
     update_grand_total()
 });
 
@@ -936,22 +1022,22 @@ function update_grand_total() {
 
     if ($('select#selected_withholdings').val() != undefined) {
         //Calculate percepciones y retenciones
-        var textosSeleccionados = $('select#selected_withholdings :selected').map(function() {
+        var textosSeleccionados = $('select#selected_withholdings :selected').map(function () {
             return $(this).text();
         }).get();
 
         var total_withholdings = 0;
-        
-        textosSeleccionados.forEach(function(textoSeleccionado) {
+
+        textosSeleccionados.forEach(function (textoSeleccionado) {
             var porcentajeParte = textoSeleccionado.split(" ").pop();
             var porcentajeNumerico = parseFloat(porcentajeParte);
-        
+
             total_withholdings += total_subtotal * (porcentajeNumerico / 100);
         });
 
         category_wh = $('select#selected_withholding_type').val();
         grand_total = (category_wh == 1) ? grand_total + total_withholdings : grand_total - total_withholdings;
-    }    
+    }
 
     $('#grand_total').text(__currency_trans_from_en(grand_total, true, true));
 
@@ -959,7 +1045,7 @@ function update_grand_total() {
 
     //__currency_convert_recursively($(document));
 }
-$(document).on('change', 'input.payment-amount', function() {
+$(document).on('change', 'input.payment-amount', function () {
     var payment = __read_number($(this), true);
     var grand_total = __read_number($('input#grand_total_hidden'), true);
     var bal = grand_total - payment;
@@ -970,7 +1056,7 @@ function update_table_sr_number() {
     var sr_number = 1;
     $('table#purchase_entry_table tbody')
         .find('.sr_number')
-        .each(function() {
+        .each(function () {
             $(this).text(sr_number);
             sr_number++;
         });
