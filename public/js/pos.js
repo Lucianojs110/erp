@@ -902,22 +902,55 @@ $(document).ready(function () {
         pos_form_obj.submit();
     });
 
+
     $('button#pos-suspend').click(function () {
         if ($('table#pos_table tbody').find('.product_row').length <= 0) {
             toastr.warning(LANG.no_products_added);
             return false;
         }
+
         if ($('#customer_id').val() == '1') {
             toastr.warning('Ingrese un cliente valido');
             return false;
         }
 
+        // EDITAR -> CUENTA CORRIENTE
+        if ($('form#edit_pos_sell_form').length > 0) {
+
+            $('#pay_method').val('credit');
+
+            var $method = pos_form_obj.find('[name="payment[0][method]"]');
+
+            // Credit normalmente no está entre las opciones del select
+            if ($method.is('select')) {
+                if ($method.find('option[value="credit"]').length === 0) {
+                    $method.append(
+                        '<option value="credit">Cuenta Corriente</option>'
+                    );
+                }
+
+                $method.val('credit');
+            } else {
+                $method.val('credit');
+            }
+
+            // CC = no se paga nada
+            __write_number(
+                pos_form_obj.find('[name="payment[0][amount]"]'),
+                0
+            );
+
+            $('input#is_suspend').val(0);
+
+            pos_form_obj.submit();
+            return false;
+        }
+
+        // VENTA NUEVA -> comportamiento original
         $('input#is_suspend').val(1);
-        //$('div#confirmSuspendModal').modal('hide');
         pos_form_obj.submit();
         $('input#is_suspend').val(0);
     });
-
     //fix select2 input issue on modal
     $('#modal_payment')
         .find('.select2')
@@ -1660,6 +1693,7 @@ function pos_product_row(variation_id, cant1) {
                             .find('td:first')
                             .append(result.html_modifier);
                     }
+                    pos_total_row();
                 } else {
                     toastr.error(result.msg);
                     $('input#search_product').focus().select();

@@ -1108,7 +1108,6 @@ class SellPosController extends Controller
         try {
             $input = $request->except('_token');
 
-            //status is send as quotation from edit sales screen.
             $input['is_quotation'] = 0;
             if ($input['status'] == 'quotation') {
                 $input['status'] = 'draft';
@@ -1116,24 +1115,27 @@ class SellPosController extends Controller
             }
 
             $is_direct_sale = false;
+
             if (!empty($input['products'])) {
-                //Get transaction value before updating.
                 $transaction_before = Transaction::find($id);
-                $status_before =  $transaction_before->status;
+                $status_before = $transaction_before->status;
 
                 if ($transaction_before->is_direct_sale == 1) {
                     $is_direct_sale = true;
                 }
 
-                //Check Customer credit limit
                 $is_credit_limit_exeeded = $this->transactionUtil->isCustomerCreditLimitExeeded($input, $id);
 
                 if ($is_credit_limit_exeeded !== false) {
                     $credit_limit_amount = $this->transactionUtil->num_f($is_credit_limit_exeeded, true);
+
                     $output = [
                         'success' => 0,
-                        'msg' => __('lang_v1.cutomer_credit_limit_exeeded', ['credit_limit' => $credit_limit_amount])
+                        'msg' => __('lang_v1.cutomer_credit_limit_exeeded', [
+                            'credit_limit' => $credit_limit_amount
+                        ])
                     ];
+
                     if (!$is_direct_sale) {
                         return $output;
                     } else {
@@ -1143,7 +1145,6 @@ class SellPosController extends Controller
                     }
                 }
 
-                //Check if there is a open register, if no then redirect to Create Register screen.
                 if (!$is_direct_sale && $this->cashRegisterUtil->countOpenedRegister() == 0) {
                     return redirect()->action('CashRegisterController@create');
                 }
@@ -1156,41 +1157,58 @@ class SellPosController extends Controller
                     'discount_type' => $input['discount_type'],
                     'discount_amount' => $input['discount_amount']
                 ];
-                $invoice_total = $this->productUtil->calculateInvoiceTotal($input['products'], $input['tax_rate_id'], $discount);
+
+                $invoice_total = $this->productUtil->calculateInvoiceTotal(
+                    $input['products'],
+                    $input['tax_rate_id'],
+                    $discount
+                );
 
                 if (!empty($request->input('transaction_date'))) {
-                    $input['transaction_date'] = $this->productUtil->uf_date($request->input('transaction_date'), true);
+                    $input['transaction_date'] = $this->productUtil->uf_date(
+                        $request->input('transaction_date'),
+                        true
+                    );
                 }
 
-                $input['commission_agent'] = !empty($request->input('commission_agent')) ? $request->input('commission_agent') : null;
+                $input['commission_agent'] = !empty($request->input('commission_agent'))
+                    ? $request->input('commission_agent')
+                    : null;
+
                 if ($commsn_agnt_setting == 'logged_in_user') {
                     $input['commission_agent'] = $user_id;
                 }
 
-                if (isset($input['exchange_rate']) && $this->transactionUtil->num_uf($input['exchange_rate']) == 0) {
+                if (
+                    isset($input['exchange_rate']) &&
+                    $this->transactionUtil->num_uf($input['exchange_rate']) == 0
+                ) {
                     $input['exchange_rate'] = 1;
                 }
 
-                //Customer group details
                 $contact_id = $request->get('contact_id', null);
                 $cg = $this->contactUtil->getCustomerGroup($business_id, $contact_id);
-                $input['customer_group_id'] = (empty($cg) || empty($cg->id)) ? null : $cg->id;
 
-                //set selling price group id
+                $input['customer_group_id'] = (empty($cg) || empty($cg->id))
+                    ? null
+                    : $cg->id;
+
                 if ($request->has('price_group')) {
                     $input['selling_price_group_id'] = $request->input('price_group');
                 }
 
-                $input['is_suspend'] = isset($input['is_suspend']) && 1 == $input['is_suspend']  ? 1 : 0;
+                $input['is_suspend'] =
+                    isset($input['is_suspend']) && $input['is_suspend'] == 1
+                    ? 1
+                    : 0;
+
                 if ($input['is_suspend']) {
-                    $input['sale_note'] = !empty($input['additional_notes']) ? $input['additional_notes'] : null;
+                    $input['sale_note'] = !empty($input['additional_notes'])
+                        ? $input['additional_notes']
+                        : null;
                 }
 
-                //Begin transaction
                 DB::beginTransaction();
-
-
-
 
                 $products = $input['products'];
 
@@ -1198,182 +1216,221 @@ class SellPosController extends Controller
                 $input['iva10'] = 0;
                 $input['iva27'] = 0;
 
-                $coeficientes = [
-                    '1' => 1.21,   // IVA 21%
-                    '2' => 1.105,  // IVA 10.5%
-                    '3' => 1.27,   // IVA 27%
-                ];
-
                 foreach ($products as $product) {
                     $unit_price = floatval(str_replace(',', '', $product['unit_price']));
                     $quantity = floatval($product['quantity']);
                     $total = $unit_price * $quantity;
 
                     if ($product['tax_id'] == '1') {
-                        // IVA 21%
-                        $neto = round($total / 1.21, 2); // ejemplo: 1000 / 1.21 = 826.44
+                        $neto = round($total / 1.21, 2);
                         $input['iva21'] += $neto;
                     } elseif ($product['tax_id'] == '2') {
-                        // IVA 10.5%
                         $neto = round($total / 1.105, 2);
                         $input['iva10'] += $neto;
                     } elseif ($product['tax_id'] == '3') {
-                        // IVA 27%
                         $neto = round($total / 1.27, 2);
                         $input['iva27'] += $neto;
                     }
                 }
 
-
-
-
-                if ($input['discount_amount'] != '0.00' &&  $input['discount_type'] == 'percentage') {
+                if (
+                    $input['discount_amount'] != '0.00' &&
+                    $input['discount_type'] == 'percentage'
+                ) {
                     $input['iva21'] -= ($input['iva21'] * $input['discount_amount'] / 100);
                     $input['iva10'] -= ($input['iva10'] * $input['discount_amount'] / 100);
                     $input['iva27'] -= ($input['iva27'] * $input['discount_amount'] / 100);
-                } elseif ($input['discount_amount'] != '0.00' &&  $input['discount_type'] == 'fixed') {
+                } elseif (
+                    $input['discount_amount'] != '0.00' &&
+                    $input['discount_type'] == 'fixed'
+                ) {
                     $discount = ($input['discount_amount'] * 100) / $input['price_total'];
+
                     $input['iva21'] -= ($input['iva21'] * $discount / 100);
                     $input['iva10'] -= ($input['iva10'] * $discount / 100);
                     $input['iva27'] -= ($input['iva27'] * $discount / 100);
                 }
 
-
-                $transaction = $this->transactionUtil->updateSellTransaction($id, $business_id, $input, $invoice_total, $user_id);
+                $transaction = $this->transactionUtil->updateSellTransaction(
+                    $id,
+                    $business_id,
+                    $input,
+                    $invoice_total,
+                    $user_id
+                );
 
                 $input['final_total'] = $transaction->final_total;
 
+                $deleted_lines = $this->transactionUtil->createOrUpdateSellLines(
+                    $transaction,
+                    $input['products'],
+                    $input['location_id'],
+                    true,
+                    $status_before
+                );
 
-                if ($input['payment'][0]['method_cheque'] === 'cheque') {
+                $has_delivery = $this->deliveryUtil->hasDelivery($id);
+
+                if ($has_delivery) {
+                    $agent = $this->deliveryUtil->getAgent($id);
+
+                    $this->deliveryUtil->reformDeliveryDetails(
+                        Delivery::where('transaction_id', $id)->first()
+                    );
+                }
+
+                $selected_method = $request->input('pay_method');
+
+                if (empty($selected_method)) {
+                    $selected_method = $input['payment'][0]['method'] ?? null;
+                }
+
+                if (empty($selected_method)) {
+                    throw new \Exception('No se recibió la forma de pago al editar la venta.');
+                }
+
+                $payment = $input['payment'][0] ?? [];
+
+                unset($payment['payment_id']);
+                unset($payment['id']);
+
+                $payment['method_cash'] = null;
+                $payment['method_card'] = null;
+                $payment['method_cheque'] = null;
+
+                if ($selected_method === 'cash') {
+                    $payment['method'] = 'cash';
+                    $payment['method_cash'] = 'cash';
+                    $payment['amount'] = $transaction->final_total;
+                } elseif ($selected_method === 'card') {
+                    $payment['method'] = 'card';
+                    $payment['method_card'] = 'card';
+                    $payment['amount'] = $transaction->final_total;
+                } elseif ($selected_method === 'cheque') {
+                    $payment['method'] = 'cheque';
+                    $payment['method_cheque'] = 'cheque';
+
+                    if (empty($payment['amount'])) {
+                        $payment['amount'] = $transaction->final_total;
+                    }
+                } elseif ($selected_method === 'credit') {
+                    $payment['method'] = 'credit';
+                    $payment['amount'] = 0;
+                } else {
+                    throw new \Exception('Forma de pago inválida: ' . $selected_method);
+                }
+
+                DB::table('cheques')
+                    ->where('transaction_id', $transaction->id)
+                    ->delete();
+
+                if ($selected_method === 'credit') {
+                    $transaction->payment_lines()->delete();
+
+                    $transaction->payment_status = 'due';
+                    $transaction->save();
+                } else {
+                    $input['payment'] = [$payment];
+
+                    $this->transactionUtil->createOrUpdatePaymentLines(
+                        $transaction,
+                        $input['payment']
+                    );
+
+                    if (!$is_direct_sale && !$transaction->is_suspend) {
+                        $this->cashRegisterUtil->updateSellPayments(
+                            $status_before,
+                            $transaction,
+                            $input['payment']
+                        );
+                    }
+
+                    $this->transactionUtil->updatePaymentStatus(
+                        $transaction->id,
+                        $transaction->final_total
+                    );
+                }
+
+                if ($selected_method === 'cheque') {
                     DB::table('cheques')->insert([
-                        'number' => $request->payment[0]['cheque_number'],
-                        'bank' => $request->payment[0]['cheque_bank'],
-                        'issue_date' => $request->payment[0]['cheque_issue_date'],
-                        'type' => $request->payment[0]['cheque_type'],
-                        'deferral_date' => $request->payment[0]['cheque_deferral_date'],
+                        'number' => $request->input('payment.0.cheque_number'),
+                        'bank' => $request->input('payment.0.cheque_bank'),
+                        'issue_date' => $request->input('payment.0.cheque_issue_date'),
+                        'type' => $request->input('payment.0.cheque_type'),
+                        'deferral_date' => $request->input('payment.0.cheque_deferral_date'),
                         'direction' => 'recibido',
-                        'amount' => $request->payment[0]['cheque_amount'],
+                        'amount' => $request->input('payment.0.cheque_amount')
+                            ?: $transaction->final_total,
                         'business_id' => $business_id,
                         'transaction_id' => $transaction->id,
                         'payment_for' => $transaction->contact_id,
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
-                };
-
-
-                //Update Sell lines
-                $deleted_lines = $this->transactionUtil->createOrUpdateSellLines($transaction, $input['products'], $input['location_id'], true, $status_before);
-
-                // if transaction has delivery, update the temporal stock
-                $has_delivery = $this->deliveryUtil->hasDelivery($id);
-
-                if ($has_delivery) {
-                    $agent = $this->deliveryUtil->getAgent($id);
-                    $this->deliveryUtil->reformDeliveryDetails(Delivery::where('transaction_id', $id)->first());
                 }
 
-                //Update update lines
-                /*
-                if (!$is_direct_sale && !$transaction->is_suspend) {
-                    //Add change return
-                    $change_return = $this->dummyPaymentLine;
-                    $change_return['amount'] = $input['change_return'];
-                    $change_return['is_return'] = 1;
-                    if (!empty($input['change_return_id'])) {
-                        $change_return['id'] = $input['change_return_id'];
-                    }
-                    $input['payment'][] = $change_return;
+                $this->productUtil->adjustProductStockForInvoice(
+                    $status_before,
+                    $transaction,
+                    $input
+                );
 
-                    $this->transactionUtil->createOrUpdatePaymentLines($transaction, $input['payment']);
-
-                    //Update cash register
-                    $this->cashRegisterUtil->updateSellPayments($status_before, $transaction, $input['payment']);
-                }
-                */
-                //\Log::emergency($input['payment']);
-                if (!empty($input['payment'][0])) {
-                    $payment = &$input['payment'][0];
-
-                    $is_cash =
-                        ($payment['method'] ?? null) === 'cash' ||
-                        ($payment['method_cash'] ?? null) === '1' ||
-                        ($payment['method_cash'] ?? null) === 1 ||
-                        ($payment['method_cash'] ?? null) === 'cash';
-
-                    $is_card =
-                        ($payment['method'] ?? null) === 'card' ||
-                        ($payment['method_card'] ?? null) === 'card';
-
-                    $is_cheque =
-                        ($payment['method'] ?? null) === 'cheque' ||
-                        ($payment['method_cheque'] ?? null) === 'cheque';
-
-                    if ($is_cash) {
-                        $payment['method'] = 'cash';
-                        $payment['amount'] = $transaction->final_total;
-                    } elseif ($is_card) {
-                        $payment['method'] = 'card';
-                        $payment['amount'] = $transaction->final_total;
-                    } elseif ($is_cheque) {
-                        $payment['method'] = 'cheque';
-
-                        if (empty($payment['amount'])) {
-                            $payment['amount'] = $transaction->final_total;
-                        }
-                    }
-
-                    unset($payment);
-                }
-
-                $this->transactionUtil->createOrUpdatePaymentLines($transaction, $input['payment']);
-
-                //Update cash register
-                $this->cashRegisterUtil->updateSellPayments($status_before, $transaction, $input['payment']);
-
-                //Update payment status
-                $this->transactionUtil->updatePaymentStatus($transaction->id, $transaction->final_total);
-
-                //Update product stock
-                $this->productUtil->adjustProductStockForInvoice($status_before, $transaction, $input);
-
-                //Allocate the quantity from purchase and add mapping of
-                //purchase & sell lines in
-                //transaction_sell_lines_purchase_lines table
                 $business = [
                     'id' => $business_id,
                     'accounting_method' => $request->session()->get('business.accounting_method'),
                     'location_id' => $input['location_id']
                 ];
-                $this->transactionUtil->adjustMappingPurchaseSell($status_before, $transaction, $business, $deleted_lines);
+
+                $this->transactionUtil->adjustMappingPurchaseSell(
+                    $status_before,
+                    $transaction,
+                    $business,
+                    $deleted_lines
+                );
 
                 if ($this->transactionUtil->isModuleEnabled('tables')) {
                     $transaction->res_table_id = request()->get('res_table_id');
                     $transaction->save();
                 }
+
                 if ($this->transactionUtil->isModuleEnabled('service_staff')) {
                     $transaction->res_waiter_id = request()->get('res_waiter_id');
                     $transaction->save();
                 }
+
                 $log_properties = [];
+
                 if (isset($input['repair_completed_on'])) {
-                    $completed_on = !empty($input['repair_completed_on']) ? $this->transactionUtil->uf_date($input['repair_completed_on'], true) : null;
+                    $completed_on = !empty($input['repair_completed_on'])
+                        ? $this->transactionUtil->uf_date($input['repair_completed_on'], true)
+                        : null;
+
                     if ($transaction->repair_completed_on != $completed_on) {
                         $log_properties['completed_on_from'] = $transaction->repair_completed_on;
                         $log_properties['completed_on_to'] = $completed_on;
                     }
                 }
 
-                //Set Module fields
                 if (!empty($input['has_module_data'])) {
-                    $this->moduleUtil->getModuleData('after_sale_saved', ['transaction' => $transaction, 'input' => $input]);
+                    $this->moduleUtil->getModuleData(
+                        'after_sale_saved',
+                        [
+                            'transaction' => $transaction,
+                            'input' => $input
+                        ]
+                    );
                 }
 
                 if (!empty($input['update_note'])) {
                     $log_properties['update_note'] = $input['update_note'];
                 }
 
-                Media::uploadMedia($business_id, $transaction, $request, 'documents');
+                Media::uploadMedia(
+                    $business_id,
+                    $transaction,
+                    $request,
+                    'documents'
+                );
 
                 activity()
                     ->performedOn($transaction)
@@ -1385,42 +1442,74 @@ class SellPosController extends Controller
                 $msg = '';
                 $receipt = '';
 
-
-                Log::emergency('Usuario: ' . Auth::user()->id . ' transacción (editar venta): ' . $transaction);
-
+                Log::emergency(
+                    'Usuario: ' .
+                        Auth::user()->id .
+                        ' transacción (editar venta): ' .
+                        $transaction
+                );
 
                 if ($request->status != 'quotation' && $request->has('registrar')) {
                     $this->registroAfip($transaction->id);
                 }
 
-                if ($input['status'] == 'draft' && $input['is_quotation'] == 0) {
-                    $msg = trans("sale.draft_added");
-                } elseif ($input['status'] == 'draft' && $input['is_quotation'] == 1) {
-                    $msg = trans("lang_v1.quotation_updated");
+                if (
+                    $input['status'] == 'draft' &&
+                    $input['is_quotation'] == 0
+                ) {
+                    $msg = trans('sale.draft_added');
+                } elseif (
+                    $input['status'] == 'draft' &&
+                    $input['is_quotation'] == 1
+                ) {
+                    $msg = trans('lang_v1.quotation_updated');
+
                     if (!$is_direct_sale) {
-                        $receipt = $this->receiptContent($business_id, $input['location_id'], $transaction->id);
+                        $receipt = $this->receiptContent(
+                            $business_id,
+                            $input['location_id'],
+                            $transaction->id
+                        );
                     } else {
                         $receipt = '';
                     }
                 } elseif ($input['status'] == 'final') {
-                    $msg = trans("sale.pos_sale_updated");
+                    $msg = trans('sale.pos_sale_updated');
+
                     if (!$is_direct_sale && !$transaction->is_suspend) {
-                        $receipt = $this->receiptContent($business_id, $input['location_id'], $transaction->id);
+                        $receipt = $this->receiptContent(
+                            $business_id,
+                            $input['location_id'],
+                            $transaction->id
+                        );
                     } else {
                         $receipt = '';
                     }
                 }
 
-                $output = ['success' => 1, 'msg' => $msg, 'receipt' => $receipt];
+                $output = [
+                    'success' => 1,
+                    'msg' => $msg,
+                    'receipt' => $receipt
+                ];
             } else {
                 $output = [
                     'success' => 0,
-                    'msg' => trans("messages.something_went_wrong")
+                    'msg' => trans('messages.something_went_wrong')
                 ];
             }
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+
+            \Log::emergency(
+                'File:' .
+                    $e->getFile() .
+                    'Line:' .
+                    $e->getLine() .
+                    'Message:' .
+                    $e->getMessage()
+            );
+
             $output = [
                 'success' => 0,
                 'msg' => __('messages.something_went_wrong')
@@ -1431,7 +1520,10 @@ class SellPosController extends Controller
             return $output;
         } else {
             if ($input['status'] == 'draft') {
-                if (isset($input['is_quotation']) && $input['is_quotation'] == 1) {
+                if (
+                    isset($input['is_quotation']) &&
+                    $input['is_quotation'] == 1
+                ) {
                     return redirect()
                         ->action('SellController@getQuotations')
                         ->with('status', $output);
@@ -1441,7 +1533,10 @@ class SellPosController extends Controller
                         ->with('status', $output);
                 }
             } else {
-                if (!empty($transaction->sub_type) && $transaction->sub_type == 'repair') {
+                if (
+                    !empty($transaction->sub_type) &&
+                    $transaction->sub_type == 'repair'
+                ) {
                     return redirect()
                         ->action('\Modules\Repair\Http\Controllers\RepairController@index')
                         ->with('status', $output);
