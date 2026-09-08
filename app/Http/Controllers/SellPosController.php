@@ -2752,7 +2752,7 @@ class SellPosController extends Controller
         $sell->afip_invoice_date = $date2;
         $sell->exp_cae = $vtocae;
         $num_fac = $last_voucher + 1;
-
+        $sell->transaction_date = $date;
         // Formatear el número de factura de AFIP
         $sell->num_invoice_afip = str_pad($punto_venta, 4, "0", STR_PAD_LEFT) . '-' . str_pad($num_fac, 8, "0", STR_PAD_LEFT);
 
