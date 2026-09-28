@@ -507,6 +507,7 @@ $(document).ready(function () {
     });
 
     //Update line total and check for quantity not greater than max quantity
+    //Update line total and check for quantity not greater than max quantity
     $('table#pos_table tbody').on('change', 'input.pos_quantity', function () {
         if (sell_form_validator) {
             sell_form_validator.element($(this));
@@ -519,13 +520,17 @@ $(document).ready(function () {
         var entered_qty = __read_number($(this));
         var tr = $(this).parents('tr');
 
-        // Actualizar piezas cuando se modifica manualmente el peso
+        // Actualizar piezas solamente cuando el peso
+        // fue modificado manualmente.
         var managesPackages = parseInt(
             tr.find('input.manages_packages').val(),
             10
         ) || 0;
 
-        if (managesPackages === 1) {
+        var updatingFromPieces =
+            tr.data('updating-from-pieces') === true;
+
+        if (managesPackages === 1 && !updatingFromPieces) {
             var weightPerMeter = parseFloat(
                 String(
                     tr.find('input.package_weight_per_meter').val() || 0
@@ -607,6 +612,7 @@ $(document).ready(function () {
 
 
     // Calcular peso según cantidad de piezas
+    // Calcular peso según cantidad de piezas
     $('table#pos_table tbody').on(
         'input change',
         'input.pos_pieces',
@@ -625,11 +631,15 @@ $(document).ready(function () {
             var pieces = parseInt($(this).val(), 10) || 0;
 
             var weightPerMeter = parseFloat(
-                tr.find('input.package_weight_per_meter').val()
+                String(
+                    tr.find('input.package_weight_per_meter').val() || 0
+                ).replace(',', '.')
             ) || 0;
 
             var packageLength = parseFloat(
-                tr.find('input.package_length').val()
+                String(
+                    tr.find('input.package_length').val() || 0
+                ).replace(',', '.')
             ) || 0;
 
             var totalWeight =
@@ -648,7 +658,14 @@ $(document).ready(function () {
                 totalWeight
             );
 
+            // Indicamos que el cambio del peso viene desde PIEZAS
+            // para evitar que el change de pos_quantity
+            // vuelva a recalcular pos_pieces.
+            tr.data('updating-from-pieces', true);
+
             quantityInput.trigger('change');
+
+            tr.data('updating-from-pieces', false);
         }
     );
 

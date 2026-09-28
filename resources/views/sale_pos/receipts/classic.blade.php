@@ -277,7 +277,7 @@
                                     @if (!empty($line['product_expiry']))
                                         , {{ $line['product_expiry_label'] }}: {{ $line['product_expiry'] }}
                                     @endif
-                                    @if (!empty($line['tax_name']))
+                                    @if (!empty($receipt_details->cae) && !empty($line['tax_name']))
                                         ({{ $line['tax_name'] }})
                                     @endif
                         </td>
