@@ -482,6 +482,16 @@ class SellPosController extends Controller
                 $carries_a_bag =  $request->input('carries_a_bag') ? 1 : 0;
                 $transaction = $this->transactionUtil->createSellTransaction($business_id, $input, $invoice_total, $user_id, $carries_a_bag);
 
+                $cotizacion = (float) $bussines->usd_exchange_rate;
+
+                if ($cotizacion <= 0) {
+                    $cotizacion = 1;
+                }
+
+                $transaction->exchange_rate = $cotizacion;
+                $transaction->exchange_rate_updated_at = now();
+                $transaction->save();
+
                 // Sincronizar el pago con el total corregido de la venta.
                 if (!empty($input['payment'][0])) {
                     $payment = &$input['payment'][0];
@@ -532,6 +542,32 @@ class SellPosController extends Controller
                 }
 
                 $this->transactionUtil->createOrUpdateSellLines($transaction, $input['products'], $input['location_id']);
+
+                $transaction->load('sell_lines');
+
+                foreach ($transaction->sell_lines as $line) {
+                    if (!empty($line->parent_sell_line_id)) {
+                        continue;
+                    }
+
+                    $variation = DB::table('variations')
+                        ->where('id', $line->variation_id)
+                        ->first();
+
+                    if (!$variation) {
+                        continue;
+                    }
+
+                    $unitPriceUsd = (float) $variation->default_purchase_price_usd;
+
+                    $line->unit_price_usd = $unitPriceUsd;
+                    $line->line_total_usd = round(
+                        $unitPriceUsd * $line->quantity,
+                        4
+                    );
+
+                    $line->save();
+                }
 
                 if (!$is_direct_sale) {
                     //Add change return
@@ -1268,6 +1304,46 @@ class SellPosController extends Controller
                     true,
                     $status_before
                 );
+
+                $business = Business::findOrFail($business_id);
+
+                $cotizacion = (float) $business->usd_exchange_rate;
+
+                if ($cotizacion <= 0) {
+                    $cotizacion = 1;
+                }
+
+                $transaction->exchange_rate = $cotizacion;
+                $transaction->exchange_rate_updated_at = now();
+                $transaction->save();
+
+                $transaction->load('sell_lines');
+
+                foreach ($transaction->sell_lines as $line) {
+
+                    if (!empty($line->parent_sell_line_id)) {
+                        continue;
+                    }
+
+                    $variation = DB::table('variations')
+                        ->where('id', $line->variation_id)
+                        ->first();
+
+                    if (!$variation) {
+                        continue;
+                    }
+
+                    $unitPriceUsd = (float) $variation->default_purchase_price_usd;
+
+                    $line->unit_price_usd = $unitPriceUsd;
+
+                    $line->line_total_usd = round(
+                        $unitPriceUsd * $line->quantity,
+                        4
+                    );
+
+                    $line->save();
+                }
 
                 $has_delivery = $this->deliveryUtil->hasDelivery($id);
 

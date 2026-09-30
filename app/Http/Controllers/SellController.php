@@ -325,10 +325,32 @@ class SellController extends Controller
                                 <li><a href="#" class="print-invoice" data-href="' . route('sell.printInvoice', [$row->id]) . '?package_slip=true"><i class="fa fa-file-text-o" aria-hidden="true"></i> ' . __("lang_v1.packing_slip") . '</a></li>';
                         }
                         $html .= '<li class="divider"></li>';
-                        if ($row->payment_status != "paid" && (auth()->user()->can("sell.create") || auth()->user()->can("direct_sell.access"))) {
-                            $html .= '<li><a href="' . action('TransactionPaymentController@addPayment', [$row->id]) . '" class="add_payment_modal"><i class="fa fa-money"></i> ' . __("purchase.add_payment") . '</a></li>';
+
+                        if (
+                            $row->payment_status != "paid" &&
+                            empty($row->cae) &&
+                            (auth()->user()->can("sell.create") || auth()->user()->can("direct_sell.access"))
+                        ) {
+                            $html .= '<li>
+        <a href="#"
+           class="update-usd-prices"
+           data-id="' . $row->id . '">
+            <i class="fa fa-refresh"></i> Actualizar precios
+        </a>
+    </li>';
                         }
 
+                        if (
+                            $row->payment_status != "paid" &&
+                            (auth()->user()->can("sell.create") || auth()->user()->can("direct_sell.access"))
+                        ) {
+                            $html .= '<li>
+        <a href="' . action('TransactionPaymentController@addPayment', [$row->id]) . '"
+           class="add_payment_modal">
+            <i class="fa fa-money"></i> ' . __("purchase.add_payment") . '
+        </a>
+    </li>';
+                        }
                         $html .= '<li><a href="' . action('TransactionPaymentController@show', [$row->id]) . '" class="view_payment_modal"><i class="fa fa-money"></i> ' . __("purchase.view_payments") . '</a></li>';
 
                         if (auth()->user()->can("sell.create")) {
@@ -1337,5 +1359,141 @@ class SellController extends Controller
         $sell->update();
 
         return (["res" => $res]);
+    }
+
+    public function updateUsdPrices($id)
+    {
+        $business_id = request()->session()->get('user.business_id');
+
+        $transaction = Transaction::where('business_id', $business_id)
+            ->where('type', 'sell')
+            ->with(['sell_lines' => function ($query) {
+                $query->whereNull('parent_sell_line_id');
+            }])
+            ->findOrFail($id);
+
+        if ($transaction->payment_status === 'paid') {
+            return response()->json([
+                'success' => false,
+                'msg' => 'La venta ya está pagada y no puede actualizarse.'
+            ]);
+        }
+
+        if (!empty($transaction->cae)) {
+            return response()->json([
+                'success' => false,
+                'msg' => 'La venta ya está facturada y no puede actualizarse.'
+            ]);
+        }
+
+        $business = Business::findOrFail($business_id);
+
+        $cotizacion = (float) $business->usd_exchange_rate;
+
+        if ($cotizacion <= 0) {
+            return response()->json([
+                'success' => false,
+                'msg' => 'La cotización actual no es válida.'
+            ]);
+        }
+
+        DB::beginTransaction();
+
+        try {
+
+            $cotizacionAnterior = (float) $transaction->exchange_rate;
+
+            $total = 0;
+
+            foreach ($transaction->sell_lines as $line) {
+
+                if (empty($line->unit_price_usd)) {
+                    continue;
+                }
+
+                $variation = DB::table('variations')
+                    ->where('id', $line->variation_id)
+                    ->first();
+
+                if (!$variation) {
+                    continue;
+                }
+
+                $margen = (float) ($variation->profit_percent ?? 0);
+
+                // Costo USD + margen
+                $precioVentaUsd = $line->unit_price_usd * (1 + ($margen / 100));
+
+                // Precio neto en pesos
+                $nuevoPrecioNeto = round(
+                    $precioVentaUsd * $cotizacion,
+                    2
+                );
+
+                // IVA
+                $coeficiente = 1;
+
+                if ($line->tax_id == 1) {
+                    $coeficiente = 1.21;
+                } elseif ($line->tax_id == 2) {
+                    $coeficiente = 1.105;
+                } elseif ($line->tax_id == 3) {
+                    $coeficiente = 1.27;
+                }
+
+                $nuevoPrecioFinal = round(
+                    $nuevoPrecioNeto * $coeficiente,
+                    2
+                );
+
+                $itemTax = round(
+                    $nuevoPrecioFinal - $nuevoPrecioNeto,
+                    2
+                );
+
+                $line->unit_price_before_discount = $nuevoPrecioFinal;
+                $line->unit_price = $nuevoPrecioNeto;
+                $line->unit_price_inc_tax = $nuevoPrecioFinal;
+                $line->item_tax = $itemTax;
+
+                $line->save();
+
+                $total += round(
+                    $nuevoPrecioFinal * $line->quantity,
+                    2
+                );
+            }
+
+            $transaction->final_total = round($total, 2);
+            $transaction->exchange_rate = $cotizacion;
+            $transaction->exchange_rate_updated_at = now();
+            $transaction->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'msg' =>
+                'Precios actualizados correctamente. Cotización: $' .
+                    number_format($cotizacionAnterior, 2, ',', '.') .
+                    ' → $' .
+                    number_format($cotizacion, 2, ',', '.')
+            ]);
+        } catch (\Throwable $e) {
+
+            DB::rollBack();
+
+            Log::error(
+                'Error actualizando precios USD de venta ' .
+                    $id .
+                    ': ' .
+                    $e->getMessage()
+            );
+
+            return response()->json([
+                'success' => false,
+                'msg' => $e->getMessage()
+            ], 500);
+        }
     }
 }

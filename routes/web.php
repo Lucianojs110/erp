@@ -348,4 +348,8 @@ Route::middleware(['IsInstalled', 'auth', 'SetSessionData', 'language', 'timezon
 
     Route::post('business/usd-exchange-rate', 'BusinessController@updateUsdExchangeRate')->name('business.update-usd-exchange-rate');
     Route::get('/business/usd-exchange-rate/status/{trackingId}', 'BusinessController@usdExchangeRateStatus')->name('business.usd-exchange-rate-status');
+    Route::post(
+        '/sells/{id}/update-usd-prices',
+        'SellController@updateUsdPrices'
+    )->name('sells.updateUsdPrices');
 });
