@@ -1137,157 +1137,294 @@ class SellPosController extends Controller
      */
     public function update(Request $request, $id)
     {
-        if (!auth()->user()->can('sell.update') && !auth()->user()->can('direct_sell.access')) {
+        if (
+            !auth()->user()->can('sell.update') &&
+            !auth()->user()->can('direct_sell.access')
+        ) {
             abort(403, 'Unauthorized action.');
         }
 
+        $is_direct_sale = false;
+
         try {
+
             $input = $request->except('_token');
 
             $input['is_quotation'] = 0;
+
             if ($input['status'] == 'quotation') {
                 $input['status'] = 'draft';
                 $input['is_quotation'] = 1;
             }
 
-            $is_direct_sale = false;
+            if (empty($input['products'])) {
+                return [
+                    'success' => 0,
+                    'msg' => trans('messages.something_went_wrong')
+                ];
+            }
 
-            if (!empty($input['products'])) {
-                $transaction_before = Transaction::find($id);
-                $status_before = $transaction_before->status;
+            $transaction_before = Transaction::findOrFail($id);
 
-                if ($transaction_before->is_direct_sale == 1) {
-                    $is_direct_sale = true;
-                }
+            $status_before = $transaction_before->status;
 
-                $is_credit_limit_exeeded = $this->transactionUtil->isCustomerCreditLimitExeeded($input, $id);
+            if ($transaction_before->is_direct_sale == 1) {
+                $is_direct_sale = true;
+            }
 
-                if ($is_credit_limit_exeeded !== false) {
-                    $credit_limit_amount = $this->transactionUtil->num_f($is_credit_limit_exeeded, true);
+            $is_credit_limit_exeeded =
+                $this->transactionUtil
+                ->isCustomerCreditLimitExeeded(
+                    $input,
+                    $id
+                );
 
-                    $output = [
-                        'success' => 0,
-                        'msg' => __('lang_v1.cutomer_credit_limit_exeeded', [
-                            'credit_limit' => $credit_limit_amount
-                        ])
-                    ];
+            if ($is_credit_limit_exeeded !== false) {
 
-                    if (!$is_direct_sale) {
-                        return $output;
-                    } else {
-                        return redirect()
-                            ->action('SellController@index')
-                            ->with('status', $output);
-                    }
-                }
+                $credit_limit_amount =
+                    $this->transactionUtil->num_f(
+                        $is_credit_limit_exeeded,
+                        true
+                    );
 
-                if (!$is_direct_sale && $this->cashRegisterUtil->countOpenedRegister() == 0) {
-                    return redirect()->action('CashRegisterController@create');
-                }
-
-                $business_id = $request->session()->get('user.business_id');
-                $user_id = $request->session()->get('user.id');
-                $commsn_agnt_setting = $request->session()->get('business.sales_cmsn_agnt');
-
-                $discount = [
-                    'discount_type' => $input['discount_type'],
-                    'discount_amount' => $input['discount_amount']
+                $output = [
+                    'success' => 0,
+                    'msg' => __('lang_v1.cutomer_credit_limit_exeeded', [
+                        'credit_limit' => $credit_limit_amount
+                    ])
                 ];
 
-                $invoice_total = $this->productUtil->calculateInvoiceTotal(
+                if (!$is_direct_sale) {
+                    return $output;
+                }
+
+                return redirect()
+                    ->action('SellController@index')
+                    ->with('status', $output);
+            }
+
+            if (
+                !$is_direct_sale &&
+                $this->cashRegisterUtil->countOpenedRegister() == 0
+            ) {
+                return redirect()
+                    ->action('CashRegisterController@create');
+            }
+
+            $business_id =
+                $request->session()->get('user.business_id');
+
+            $user_id =
+                $request->session()->get('user.id');
+
+            $commsn_agnt_setting =
+                $request->session()
+                ->get('business.sales_cmsn_agnt');
+
+            $discount = [
+                'discount_type' => $input['discount_type'],
+                'discount_amount' => $input['discount_amount']
+            ];
+
+            /*
+         * Este total se mantiene porque updateSellTransaction()
+         * lo necesita inicialmente.
+         * Más abajo lo sincronizamos nuevamente desde las líneas
+         * realmente guardadas.
+         */
+            $invoice_total =
+                $this->productUtil->calculateInvoiceTotal(
                     $input['products'],
                     $input['tax_rate_id'],
                     $discount
                 );
 
-                if (!empty($request->input('transaction_date'))) {
-                    $input['transaction_date'] = $this->productUtil->uf_date(
+            if (!empty($request->input('transaction_date'))) {
+
+                $input['transaction_date'] =
+                    $this->productUtil->uf_date(
                         $request->input('transaction_date'),
                         true
                     );
-                }
+            }
 
-                $input['commission_agent'] = !empty($request->input('commission_agent'))
-                    ? $request->input('commission_agent')
+            $input['commission_agent'] =
+                !empty($request->input('commission_agent'))
+                ? $request->input('commission_agent')
+                : null;
+
+            if ($commsn_agnt_setting == 'logged_in_user') {
+                $input['commission_agent'] = $user_id;
+            }
+
+            if (
+                isset($input['exchange_rate']) &&
+                $this->transactionUtil
+                ->num_uf($input['exchange_rate']) == 0
+            ) {
+                $input['exchange_rate'] = 1;
+            }
+
+            $contact_id =
+                $request->get('contact_id', null);
+
+            $cg =
+                $this->contactUtil->getCustomerGroup(
+                    $business_id,
+                    $contact_id
+                );
+
+            $input['customer_group_id'] =
+                (empty($cg) || empty($cg->id))
+                ? null
+                : $cg->id;
+
+            if ($request->has('price_group')) {
+
+                $input['selling_price_group_id'] =
+                    $request->input('price_group');
+            }
+
+            $input['is_suspend'] =
+                isset($input['is_suspend']) &&
+                $input['is_suspend'] == 1
+                ? 1
+                : 0;
+
+            if ($input['is_suspend']) {
+
+                $input['sale_note'] =
+                    !empty($input['additional_notes'])
+                    ? $input['additional_notes']
                     : null;
+            }
 
-                if ($commsn_agnt_setting == 'logged_in_user') {
-                    $input['commission_agent'] = $user_id;
+            DB::beginTransaction();
+
+            /*
+        |--------------------------------------------------------------------------
+        | IVA inicial
+        |--------------------------------------------------------------------------
+        */
+
+            $products = $input['products'];
+
+            $input['iva21'] = 0;
+            $input['iva10'] = 0;
+            $input['iva27'] = 0;
+
+            foreach ($products as $product) {
+
+                $unit_price = floatval(
+                    str_replace(
+                        ',',
+                        '',
+                        $product['unit_price']
+                    )
+                );
+
+                $quantity =
+                    floatval($product['quantity']);
+
+                $total =
+                    $unit_price * $quantity;
+
+                if ($product['tax_id'] == '1') {
+
+                    $neto =
+                        round(
+                            $total / 1.21,
+                            2
+                        );
+
+                    $input['iva21'] += $neto;
+                } elseif ($product['tax_id'] == '2') {
+
+                    $neto =
+                        round(
+                            $total / 1.105,
+                            2
+                        );
+
+                    $input['iva10'] += $neto;
+                } elseif ($product['tax_id'] == '3') {
+
+                    $neto =
+                        round(
+                            $total / 1.27,
+                            2
+                        );
+
+                    $input['iva27'] += $neto;
                 }
+            }
 
-                if (
-                    isset($input['exchange_rate']) &&
-                    $this->transactionUtil->num_uf($input['exchange_rate']) == 0
-                ) {
-                    $input['exchange_rate'] = 1;
+            if (
+                $input['discount_amount'] != '0.00' &&
+                $input['discount_type'] == 'percentage'
+            ) {
+
+                $input['iva21'] -=
+                    $input['iva21'] *
+                    $input['discount_amount'] /
+                    100;
+
+                $input['iva10'] -=
+                    $input['iva10'] *
+                    $input['discount_amount'] /
+                    100;
+
+                $input['iva27'] -=
+                    $input['iva27'] *
+                    $input['discount_amount'] /
+                    100;
+            } elseif (
+                $input['discount_amount'] != '0.00' &&
+                $input['discount_type'] == 'fixed'
+            ) {
+
+                $priceTotal =
+                    (float) str_replace(
+                        ',',
+                        '',
+                        $input['price_total']
+                    );
+
+                if ($priceTotal > 0) {
+
+                    $discountPercentage =
+                        (
+                            $input['discount_amount'] *
+                            100
+                        ) /
+                        $priceTotal;
+
+                    $input['iva21'] -=
+                        $input['iva21'] *
+                        $discountPercentage /
+                        100;
+
+                    $input['iva10'] -=
+                        $input['iva10'] *
+                        $discountPercentage /
+                        100;
+
+                    $input['iva27'] -=
+                        $input['iva27'] *
+                        $discountPercentage /
+                        100;
                 }
+            }
 
-                $contact_id = $request->get('contact_id', null);
-                $cg = $this->contactUtil->getCustomerGroup($business_id, $contact_id);
+            /*
+        |--------------------------------------------------------------------------
+        | Actualizar transacción
+        |--------------------------------------------------------------------------
+        */
 
-                $input['customer_group_id'] = (empty($cg) || empty($cg->id))
-                    ? null
-                    : $cg->id;
-
-                if ($request->has('price_group')) {
-                    $input['selling_price_group_id'] = $request->input('price_group');
-                }
-
-                $input['is_suspend'] =
-                    isset($input['is_suspend']) && $input['is_suspend'] == 1
-                    ? 1
-                    : 0;
-
-                if ($input['is_suspend']) {
-                    $input['sale_note'] = !empty($input['additional_notes'])
-                        ? $input['additional_notes']
-                        : null;
-                }
-
-                DB::beginTransaction();
-
-                $products = $input['products'];
-
-                $input['iva21'] = 0;
-                $input['iva10'] = 0;
-                $input['iva27'] = 0;
-
-                foreach ($products as $product) {
-                    $unit_price = floatval(str_replace(',', '', $product['unit_price']));
-                    $quantity = floatval($product['quantity']);
-                    $total = $unit_price * $quantity;
-
-                    if ($product['tax_id'] == '1') {
-                        $neto = round($total / 1.21, 2);
-                        $input['iva21'] += $neto;
-                    } elseif ($product['tax_id'] == '2') {
-                        $neto = round($total / 1.105, 2);
-                        $input['iva10'] += $neto;
-                    } elseif ($product['tax_id'] == '3') {
-                        $neto = round($total / 1.27, 2);
-                        $input['iva27'] += $neto;
-                    }
-                }
-
-                if (
-                    $input['discount_amount'] != '0.00' &&
-                    $input['discount_type'] == 'percentage'
-                ) {
-                    $input['iva21'] -= ($input['iva21'] * $input['discount_amount'] / 100);
-                    $input['iva10'] -= ($input['iva10'] * $input['discount_amount'] / 100);
-                    $input['iva27'] -= ($input['iva27'] * $input['discount_amount'] / 100);
-                } elseif (
-                    $input['discount_amount'] != '0.00' &&
-                    $input['discount_type'] == 'fixed'
-                ) {
-                    $discount = ($input['discount_amount'] * 100) / $input['price_total'];
-
-                    $input['iva21'] -= ($input['iva21'] * $discount / 100);
-                    $input['iva10'] -= ($input['iva10'] * $discount / 100);
-                    $input['iva27'] -= ($input['iva27'] * $discount / 100);
-                }
-
-                $transaction = $this->transactionUtil->updateSellTransaction(
+            $transaction =
+                $this->transactionUtil
+                ->updateSellTransaction(
                     $id,
                     $business_id,
                     $input,
@@ -1295,9 +1432,15 @@ class SellPosController extends Controller
                     $user_id
                 );
 
-                $input['final_total'] = $transaction->final_total;
+            /*
+        |--------------------------------------------------------------------------
+        | Actualizar líneas
+        |--------------------------------------------------------------------------
+        */
 
-                $deleted_lines = $this->transactionUtil->createOrUpdateSellLines(
+            $deleted_lines =
+                $this->transactionUtil
+                ->createOrUpdateSellLines(
                     $transaction,
                     $input['products'],
                     $input['location_id'],
@@ -1305,326 +1448,837 @@ class SellPosController extends Controller
                     $status_before
                 );
 
-                $business = Business::findOrFail($business_id);
+            /*
+        |--------------------------------------------------------------------------
+        | Guardar cotización y datos USD
+        |--------------------------------------------------------------------------
+        */
 
-                $cotizacion = (float) $business->usd_exchange_rate;
+            $businessModel =
+                Business::findOrFail($business_id);
 
-                if ($cotizacion <= 0) {
-                    $cotizacion = 1;
+            $cotizacion =
+                (float) $businessModel->usd_exchange_rate;
+
+            if ($cotizacion <= 0) {
+                $cotizacion = 1;
+            }
+
+            $transaction->exchange_rate =
+                $cotizacion;
+
+            $transaction->exchange_rate_updated_at =
+                now();
+
+            $transaction->save();
+
+            /*
+         * fresh() es importante.
+         * Necesitamos las líneas como quedaron realmente después
+         * de createOrUpdateSellLines().
+         */
+            $transaction->load('sell_lines');
+
+            foreach ($transaction->sell_lines as $line) {
+
+                if (!empty($line->parent_sell_line_id)) {
+                    continue;
                 }
 
-                $transaction->exchange_rate = $cotizacion;
-                $transaction->exchange_rate_updated_at = now();
-                $transaction->save();
+                $variation =
+                    DB::table('variations')
+                    ->where(
+                        'id',
+                        $line->variation_id
+                    )
+                    ->first();
 
-                $transaction->load('sell_lines');
+                if (!$variation) {
+                    continue;
+                }
 
-                foreach ($transaction->sell_lines as $line) {
+                $unitPriceUsd =
+                    (float)
+                    $variation->default_purchase_price_usd;
 
-                    if (!empty($line->parent_sell_line_id)) {
-                        continue;
-                    }
+                $line->unit_price_usd =
+                    $unitPriceUsd;
 
-                    $variation = DB::table('variations')
-                        ->where('id', $line->variation_id)
-                        ->first();
-
-                    if (!$variation) {
-                        continue;
-                    }
-
-                    $unitPriceUsd = (float) $variation->default_purchase_price_usd;
-
-                    $line->unit_price_usd = $unitPriceUsd;
-
-                    $line->line_total_usd = round(
-                        $unitPriceUsd * $line->quantity,
+                $line->line_total_usd =
+                    round(
+                        $unitPriceUsd *
+                            (float) $line->quantity,
                         4
                     );
 
-                    $line->save();
-                }
+                $line->save();
+            }
 
-                $has_delivery = $this->deliveryUtil->hasDelivery($id);
+            /*
+        |--------------------------------------------------------------------------
+        | SINCRONIZAR TOTALES DESDE LAS LÍNEAS REALES
+        |--------------------------------------------------------------------------
+        |
+        | Esta es la parte que faltaba.
+        |
+        */
 
-                if ($has_delivery) {
-                    $agent = $this->deliveryUtil->getAgent($id);
+            $transaction->load('sell_lines');
 
-                    $this->deliveryUtil->reformDeliveryDetails(
-                        Delivery::where('transaction_id', $id)->first()
+            $lineTotal = 0;
+
+            $iva21 = 0;
+            $iva10 = 0;
+            $iva27 = 0;
+
+            foreach ($transaction->sell_lines as $line) {
+
+                /*
+             * Los modificadores también pueden tener precio.
+             * Para el total general no los descartamos.
+             */
+
+                $cantidad =
+                    (float) $line->quantity;
+
+                $precioFinal =
+                    (float) $line->unit_price_inc_tax;
+
+                $precioNeto =
+                    (float) $line->unit_price;
+
+                $subtotalFinal =
+                    round(
+                        $precioFinal * $cantidad,
+                        2
                     );
+
+                $subtotalNeto =
+                    round(
+                        $precioNeto * $cantidad,
+                        2
+                    );
+
+                $lineTotal +=
+                    $subtotalFinal;
+
+                /*
+             * Para nuestros campos personalizados IVA
+             * ignoramos modificadores hijos.
+             */
+                if (!empty($line->parent_sell_line_id)) {
+                    continue;
                 }
 
-                $selected_method = $request->input('pay_method');
+                if ($line->tax_id == 1) {
 
-                if (empty($selected_method)) {
-                    $selected_method = $input['payment'][0]['method'] ?? null;
+                    $iva21 +=
+                        $subtotalNeto;
+                } elseif ($line->tax_id == 2) {
+
+                    $iva10 +=
+                        $subtotalNeto;
+                } elseif ($line->tax_id == 3) {
+
+                    $iva27 +=
+                        $subtotalNeto;
                 }
+            }
 
-                if (empty($selected_method)) {
-                    throw new \Exception('No se recibió la forma de pago al editar la venta.');
-                }
+            $lineTotal =
+                round(
+                    $lineTotal,
+                    2
+                );
 
-                $payment = $input['payment'][0] ?? [];
+            /*
+        |--------------------------------------------------------------------------
+        | Descuento general
+        |--------------------------------------------------------------------------
+        */
 
-                unset($payment['payment_id']);
-                unset($payment['id']);
+            $discountAmount = 0;
 
-                $payment['method_cash'] = null;
-                $payment['method_card'] = null;
-                $payment['method_cheque'] = null;
+            if (
+                !empty($input['discount_amount']) &&
+                (float) $input['discount_amount'] > 0
+            ) {
 
-                if ($selected_method === 'cash') {
-                    $payment['method'] = 'cash';
-                    $payment['method_cash'] = 'cash';
-                    $payment['amount'] = $transaction->final_total;
-                } elseif ($selected_method === 'card') {
-                    $payment['method'] = 'card';
-                    $payment['method_card'] = 'card';
-                    $payment['amount'] = $transaction->final_total;
-                } elseif ($selected_method === 'cheque') {
-                    $payment['method'] = 'cheque';
-                    $payment['method_cheque'] = 'cheque';
+                if ($input['discount_type'] == 'percentage') {
 
-                    if (empty($payment['amount'])) {
-                        $payment['amount'] = $transaction->final_total;
+                    $discountAmount =
+                        round(
+                            $lineTotal *
+                                (
+                                    (float)
+                                    $input['discount_amount'] /
+                                    100
+                                ),
+                            2
+                        );
+
+                    $factor =
+                        1 -
+                        (
+                            (float)
+                            $input['discount_amount'] /
+                            100
+                        );
+
+                    $iva21 *= $factor;
+                    $iva10 *= $factor;
+                    $iva27 *= $factor;
+                } elseif (
+                    $input['discount_type'] == 'fixed'
+                ) {
+
+                    $discountAmount =
+                        (float)
+                        $input['discount_amount'];
+
+                    if ($lineTotal > 0) {
+
+                        $factor =
+                            max(
+                                0,
+                                (
+                                    $lineTotal -
+                                    $discountAmount
+                                ) /
+                                    $lineTotal
+                            );
+
+                        $iva21 *= $factor;
+                        $iva10 *= $factor;
+                        $iva27 *= $factor;
                     }
-                } elseif ($selected_method === 'credit') {
-                    $payment['method'] = 'credit';
-                    $payment['amount'] = 0;
-                } else {
-                    throw new \Exception('Forma de pago inválida: ' . $selected_method);
                 }
+            }
 
-                DB::table('cheques')
-                    ->where('transaction_id', $transaction->id)
+            /*
+         * total_before_tax en este sistema representa
+         * el subtotal de líneas antes de impuesto/cargo global,
+         * no la suma neta de IVA de los productos.
+         */
+            $totalBeforeTax =
+                $lineTotal;
+
+            /*
+         * Impuesto general de la operación, si existe.
+         * Normalmente en tu POS queda en 0.
+         */
+            $orderTax =
+                isset($transaction->tax_amount)
+                ? (float) $transaction->tax_amount
+                : 0;
+
+            $shipping =
+                isset($transaction->shipping_charges)
+                ? (float) $transaction->shipping_charges
+                : 0;
+
+            $finalTotal =
+                $lineTotal -
+                $discountAmount +
+                $orderTax +
+                $shipping;
+
+            $finalTotal =
+                round(
+                    $finalTotal,
+                    2
+                );
+
+            /*
+        |--------------------------------------------------------------------------
+        | Guardar cabecera sincronizada
+        |--------------------------------------------------------------------------
+        */
+
+            $transaction->total_before_tax =
+                round(
+                    $totalBeforeTax,
+                    2
+                );
+
+            $transaction->final_total =
+                $finalTotal;
+
+            $transaction->iva21 =
+                round(
+                    $iva21,
+                    2
+                );
+
+            $transaction->iva10 =
+                round(
+                    $iva10,
+                    2
+                );
+
+            $transaction->iva27 =
+                round(
+                    $iva27,
+                    2
+                );
+
+            $transaction->exchange_rate =
+                $cotizacion;
+
+            $transaction->exchange_rate_updated_at =
+                now();
+
+            $transaction->save();
+
+            /*
+         * Desde este punto TODO debe usar el total corregido.
+         */
+            $input['final_total'] =
+                $transaction->final_total;
+
+            /*
+        |--------------------------------------------------------------------------
+        | Delivery
+        |--------------------------------------------------------------------------
+        */
+
+            $has_delivery =
+                $this->deliveryUtil
+                ->hasDelivery($id);
+
+            if ($has_delivery) {
+
+                $agent =
+                    $this->deliveryUtil
+                    ->getAgent($id);
+
+                $this->deliveryUtil
+                    ->reformDeliveryDetails(
+                        Delivery::where(
+                            'transaction_id',
+                            $id
+                        )->first()
+                    );
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | Forma de pago
+        |--------------------------------------------------------------------------
+        */
+
+            $selected_method =
+                $request->input('pay_method');
+
+            if (empty($selected_method)) {
+
+                $selected_method =
+                    $input['payment'][0]['method']
+                    ?? null;
+            }
+
+            if (empty($selected_method)) {
+
+                throw new \Exception(
+                    'No se recibió la forma de pago al editar la venta.'
+                );
+            }
+
+            $payment =
+                $input['payment'][0] ?? [];
+
+            unset($payment['payment_id']);
+            unset($payment['id']);
+
+            $payment['method_cash'] = null;
+            $payment['method_card'] = null;
+            $payment['method_cheque'] = null;
+
+            if ($selected_method === 'cash') {
+
+                $payment['method'] = 'cash';
+
+                $payment['method_cash'] =
+                    'cash';
+
+                $payment['amount'] =
+                    $transaction->final_total;
+            } elseif ($selected_method === 'card') {
+
+                $payment['method'] =
+                    'card';
+
+                $payment['method_card'] =
+                    'card';
+
+                $payment['amount'] =
+                    $transaction->final_total;
+            } elseif (
+                $selected_method === 'cheque'
+            ) {
+
+                $payment['method'] =
+                    'cheque';
+
+                $payment['method_cheque'] =
+                    'cheque';
+
+                if (empty($payment['amount'])) {
+
+                    $payment['amount'] =
+                        $transaction->final_total;
+                }
+            } elseif (
+                $selected_method === 'credit'
+            ) {
+
+                $payment['method'] =
+                    'credit';
+
+                $payment['amount'] =
+                    0;
+            } else {
+
+                throw new \Exception(
+                    'Forma de pago inválida: ' .
+                        $selected_method
+                );
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | Cheques anteriores
+        |--------------------------------------------------------------------------
+        */
+
+            DB::table('cheques')
+                ->where(
+                    'transaction_id',
+                    $transaction->id
+                )
+                ->delete();
+
+            /*
+        |--------------------------------------------------------------------------
+        | Pagos
+        |--------------------------------------------------------------------------
+        */
+
+            if ($selected_method === 'credit') {
+
+                $transaction
+                    ->payment_lines()
                     ->delete();
 
-                if ($selected_method === 'credit') {
-                    $transaction->payment_lines()->delete();
+                $transaction->payment_status =
+                    'due';
 
-                    $transaction->payment_status = 'due';
-                    $transaction->save();
-                } else {
-                    $input['payment'] = [$payment];
+                $transaction->save();
+            } else {
 
-                    $this->transactionUtil->createOrUpdatePaymentLines(
+                $input['payment'] =
+                    [$payment];
+
+                $this->transactionUtil
+                    ->createOrUpdatePaymentLines(
                         $transaction,
                         $input['payment']
                     );
 
-                    if (!$is_direct_sale && !$transaction->is_suspend) {
-                        $this->cashRegisterUtil->updateSellPayments(
+                if (
+                    !$is_direct_sale &&
+                    !$transaction->is_suspend
+                ) {
+
+                    $this->cashRegisterUtil
+                        ->updateSellPayments(
                             $status_before,
                             $transaction,
                             $input['payment']
                         );
-                    }
+                }
 
-                    $this->transactionUtil->updatePaymentStatus(
+                $this->transactionUtil
+                    ->updatePaymentStatus(
                         $transaction->id,
                         $transaction->final_total
                     );
-                }
+            }
 
-                if ($selected_method === 'cheque') {
-                    DB::table('cheques')->insert([
-                        'number' => $request->input('payment.0.cheque_number'),
-                        'bank' => $request->input('payment.0.cheque_bank'),
-                        'issue_date' => $request->input('payment.0.cheque_issue_date'),
-                        'type' => $request->input('payment.0.cheque_type'),
-                        'deferral_date' => $request->input('payment.0.cheque_deferral_date'),
-                        'direction' => 'recibido',
-                        'amount' => $request->input('payment.0.cheque_amount')
+            /*
+        |--------------------------------------------------------------------------
+        | Nuevo cheque
+        |--------------------------------------------------------------------------
+        */
+
+            if ($selected_method === 'cheque') {
+
+                DB::table('cheques')
+                    ->insert([
+
+                        'number' =>
+                        $request->input(
+                            'payment.0.cheque_number'
+                        ),
+
+                        'bank' =>
+                        $request->input(
+                            'payment.0.cheque_bank'
+                        ),
+
+                        'issue_date' =>
+                        $request->input(
+                            'payment.0.cheque_issue_date'
+                        ),
+
+                        'type' =>
+                        $request->input(
+                            'payment.0.cheque_type'
+                        ),
+
+                        'deferral_date' =>
+                        $request->input(
+                            'payment.0.cheque_deferral_date'
+                        ),
+
+                        'direction' =>
+                        'recibido',
+
+                        'amount' =>
+                        $request->input(
+                            'payment.0.cheque_amount'
+                        )
                             ?: $transaction->final_total,
-                        'business_id' => $business_id,
-                        'transaction_id' => $transaction->id,
-                        'payment_for' => $transaction->contact_id,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
 
-                $this->productUtil->adjustProductStockForInvoice(
+                        'business_id' =>
+                        $business_id,
+
+                        'transaction_id' =>
+                        $transaction->id,
+
+                        'payment_for' =>
+                        $transaction->contact_id,
+
+                        'created_at' =>
+                        now(),
+
+                        'updated_at' =>
+                        now(),
+                    ]);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | Stock
+        |--------------------------------------------------------------------------
+        */
+
+            $this->productUtil
+                ->adjustProductStockForInvoice(
                     $status_before,
                     $transaction,
                     $input
                 );
 
-                $business = [
-                    'id' => $business_id,
-                    'accounting_method' => $request->session()->get('business.accounting_method'),
-                    'location_id' => $input['location_id']
-                ];
+            /*
+        |--------------------------------------------------------------------------
+        | Mapeo compras / ventas
+        |--------------------------------------------------------------------------
+        */
 
-                $this->transactionUtil->adjustMappingPurchaseSell(
+            $businessData = [
+
+                'id' =>
+                $business_id,
+
+                'accounting_method' =>
+                $request
+                    ->session()
+                    ->get(
+                        'business.accounting_method'
+                    ),
+
+                'location_id' =>
+                $input['location_id']
+            ];
+
+            $this->transactionUtil
+                ->adjustMappingPurchaseSell(
                     $status_before,
                     $transaction,
-                    $business,
+                    $businessData,
                     $deleted_lines
                 );
 
-                if ($this->transactionUtil->isModuleEnabled('tables')) {
-                    $transaction->res_table_id = request()->get('res_table_id');
-                    $transaction->save();
-                }
+            /*
+        |--------------------------------------------------------------------------
+        | Módulos
+        |--------------------------------------------------------------------------
+        */
 
-                if ($this->transactionUtil->isModuleEnabled('service_staff')) {
-                    $transaction->res_waiter_id = request()->get('res_waiter_id');
-                    $transaction->save();
-                }
+            if (
+                $this->transactionUtil
+                ->isModuleEnabled('tables')
+            ) {
 
-                $log_properties = [];
+                $transaction->res_table_id =
+                    request()
+                    ->get('res_table_id');
 
-                if (isset($input['repair_completed_on'])) {
-                    $completed_on = !empty($input['repair_completed_on'])
-                        ? $this->transactionUtil->uf_date($input['repair_completed_on'], true)
-                        : null;
+                $transaction->save();
+            }
 
-                    if ($transaction->repair_completed_on != $completed_on) {
-                        $log_properties['completed_on_from'] = $transaction->repair_completed_on;
-                        $log_properties['completed_on_to'] = $completed_on;
-                    }
-                }
+            if (
+                $this->transactionUtil
+                ->isModuleEnabled(
+                    'service_staff'
+                )
+            ) {
 
-                if (!empty($input['has_module_data'])) {
-                    $this->moduleUtil->getModuleData(
-                        'after_sale_saved',
-                        [
-                            'transaction' => $transaction,
-                            'input' => $input
-                        ]
-                    );
-                }
+                $transaction->res_waiter_id =
+                    request()
+                    ->get('res_waiter_id');
 
-                if (!empty($input['update_note'])) {
-                    $log_properties['update_note'] = $input['update_note'];
-                }
+                $transaction->save();
+            }
 
-                Media::uploadMedia(
-                    $business_id,
-                    $transaction,
-                    $request,
-                    'documents'
-                );
+            $log_properties = [];
 
-                activity()
-                    ->performedOn($transaction)
-                    ->withProperties($log_properties)
-                    ->log('edited');
+            if (
+                isset(
+                    $input['repair_completed_on']
+                )
+            ) {
 
-                DB::commit();
-
-                $msg = '';
-                $receipt = '';
-
-                Log::emergency(
-                    'Usuario: ' .
-                        Auth::user()->id .
-                        ' transacción (editar venta): ' .
-                        $transaction
-                );
-
-                if ($request->status != 'quotation' && $request->has('registrar')) {
-                    $this->registroAfip($transaction->id);
-                }
+                $completed_on =
+                    !empty($input['repair_completed_on'])
+                    ? $this->transactionUtil
+                    ->uf_date(
+                        $input['repair_completed_on'],
+                        true
+                    )
+                    : null;
 
                 if (
-                    $input['status'] == 'draft' &&
-                    $input['is_quotation'] == 0
+                    $transaction->repair_completed_on
+                    != $completed_on
                 ) {
-                    $msg = trans('sale.draft_added');
-                } elseif (
-                    $input['status'] == 'draft' &&
-                    $input['is_quotation'] == 1
-                ) {
-                    $msg = trans('lang_v1.quotation_updated');
 
-                    if (!$is_direct_sale) {
-                        $receipt = $this->receiptContent(
-                            $business_id,
-                            $input['location_id'],
-                            $transaction->id
-                        );
-                    } else {
-                        $receipt = '';
-                    }
-                } elseif ($input['status'] == 'final') {
-                    $msg = trans('sale.pos_sale_updated');
+                    $log_properties['completed_on_from'] =
+                        $transaction
+                        ->repair_completed_on;
 
-                    if (!$is_direct_sale && !$transaction->is_suspend) {
-                        $receipt = $this->receiptContent(
-                            $business_id,
-                            $input['location_id'],
-                            $transaction->id
-                        );
-                    } else {
-                        $receipt = '';
-                    }
+                    $log_properties['completed_on_to'] =
+                        $completed_on;
                 }
-
-                $output = [
-                    'success' => 1,
-                    'msg' => $msg,
-                    'receipt' => $receipt
-                ];
-            } else {
-                $output = [
-                    'success' => 0,
-                    'msg' => trans('messages.something_went_wrong')
-                ];
             }
-        } catch (\Exception $e) {
+
+            if (
+                !empty($input['has_module_data'])
+            ) {
+
+                $this->moduleUtil
+                    ->getModuleData(
+                        'after_sale_saved',
+                        [
+                            'transaction' =>
+                            $transaction,
+
+                            'input' =>
+                            $input
+                        ]
+                    );
+            }
+
+            if (
+                !empty($input['update_note'])
+            ) {
+
+                $log_properties['update_note'] =
+                    $input['update_note'];
+            }
+
+            Media::uploadMedia(
+                $business_id,
+                $transaction,
+                $request,
+                'documents'
+            );
+
+            activity()
+                ->performedOn($transaction)
+                ->withProperties(
+                    $log_properties
+                )
+                ->log('edited');
+
+            DB::commit();
+
+            $msg = '';
+            $receipt = '';
+
+            Log::emergency(
+                'Usuario: ' .
+                    Auth::user()->id .
+                    ' transacción (editar venta): ' .
+                    $transaction
+            );
+
+            /*
+        |--------------------------------------------------------------------------
+        | AFIP
+        |--------------------------------------------------------------------------
+        */
+
+            if (
+                $request->status != 'quotation' &&
+                $request->has('registrar')
+            ) {
+                $this->registroAfip(
+                    $transaction->id
+                );
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | Respuesta
+        |--------------------------------------------------------------------------
+        */
+
+            if (
+                $input['status'] == 'draft' &&
+                $input['is_quotation'] == 0
+            ) {
+
+                $msg =
+                    trans('sale.draft_added');
+            } elseif (
+                $input['status'] == 'draft' &&
+                $input['is_quotation'] == 1
+            ) {
+
+                $msg =
+                    trans(
+                        'lang_v1.quotation_updated'
+                    );
+
+                if (!$is_direct_sale) {
+
+                    $receipt =
+                        $this->receiptContent(
+                            $business_id,
+                            $input['location_id'],
+                            $transaction->id
+                        );
+                } else {
+
+                    $receipt = '';
+                }
+            } elseif (
+                $input['status'] == 'final'
+            ) {
+
+                $msg =
+                    trans(
+                        'sale.pos_sale_updated'
+                    );
+
+                if (
+                    !$is_direct_sale &&
+                    !$transaction->is_suspend
+                ) {
+
+                    $receipt =
+                        $this->receiptContent(
+                            $business_id,
+                            $input['location_id'],
+                            $transaction->id
+                        );
+                } else {
+
+                    $receipt = '';
+                }
+            }
+
+            $output = [
+                'success' => 1,
+                'msg' => $msg,
+                'receipt' => $receipt
+            ];
+        } catch (\Throwable $e) {
+
             DB::rollBack();
 
-            \Log::emergency(
+            Log::emergency(
                 'File:' .
                     $e->getFile() .
-                    'Line:' .
+                    ' Line:' .
                     $e->getLine() .
-                    'Message:' .
+                    ' Message:' .
                     $e->getMessage()
             );
 
             $output = [
                 'success' => 0,
-                'msg' => __('messages.something_went_wrong')
+                'msg' => $e->getMessage()
             ];
         }
 
         if (!$is_direct_sale) {
             return $output;
-        } else {
-            if ($input['status'] == 'draft') {
-                if (
-                    isset($input['is_quotation']) &&
-                    $input['is_quotation'] == 1
-                ) {
-                    return redirect()
-                        ->action('SellController@getQuotations')
-                        ->with('status', $output);
-                } else {
-                    return redirect()
-                        ->action('SellController@getDrafts')
-                        ->with('status', $output);
-                }
-            } else {
-                if (
-                    !empty($transaction->sub_type) &&
-                    $transaction->sub_type == 'repair'
-                ) {
-                    return redirect()
-                        ->action('\Modules\Repair\Http\Controllers\RepairController@index')
-                        ->with('status', $output);
-                }
+        }
+
+        if ($input['status'] == 'draft') {
+
+            if (
+                isset($input['is_quotation']) &&
+                $input['is_quotation'] == 1
+            ) {
 
                 return redirect()
-                    ->action('SellController@index')
-                    ->with('status', $output);
+                    ->action(
+                        'SellController@getQuotations'
+                    )
+                    ->with(
+                        'status',
+                        $output
+                    );
             }
-        }
-    }
 
+            return redirect()
+                ->action(
+                    'SellController@getDrafts'
+                )
+                ->with(
+                    'status',
+                    $output
+                );
+        }
+
+        if (
+            !empty($transaction->sub_type) &&
+            $transaction->sub_type == 'repair'
+        ) {
+
+            return redirect()
+                ->action(
+                    '\Modules\Repair\Http\Controllers\RepairController@index'
+                )
+                ->with(
+                    'status',
+                    $output
+                );
+        }
+
+        return redirect()
+            ->action(
+                'SellController@index'
+            )
+            ->with(
+                'status',
+                $output
+            );
+    }
     /**
      * Remove the specified resource from storage.
      *

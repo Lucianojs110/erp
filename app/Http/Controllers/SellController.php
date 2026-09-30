@@ -1403,7 +1403,10 @@ class SellController extends Controller
 
             $cotizacionAnterior = (float) $transaction->exchange_rate;
 
-            $total = 0;
+            $totalFinal = 0;
+            $iva21 = 0;
+            $iva10 = 0;
+            $iva27 = 0;
 
             foreach ($transaction->sell_lines as $line) {
 
@@ -1422,7 +1425,9 @@ class SellController extends Controller
                 $margen = (float) ($variation->profit_percent ?? 0);
 
                 // Costo USD + margen
-                $precioVentaUsd = $line->unit_price_usd * (1 + ($margen / 100));
+                $precioVentaUsd =
+                    $line->unit_price_usd *
+                    (1 + ($margen / 100));
 
                 // Precio neto en pesos
                 $nuevoPrecioNeto = round(
@@ -1458,16 +1463,49 @@ class SellController extends Controller
 
                 $line->save();
 
-                $total += round(
-                    $nuevoPrecioFinal * $line->quantity,
+                $cantidad = (float) $line->quantity;
+
+                $subtotalFinal = round(
+                    $nuevoPrecioFinal * $cantidad,
                     2
                 );
+
+                $subtotalNeto = round(
+                    $nuevoPrecioNeto * $cantidad,
+                    2
+                );
+
+                $totalFinal += $subtotalFinal;
+
+                if ($line->tax_id == 1) {
+                    $iva21 += $subtotalNeto;
+                } elseif ($line->tax_id == 2) {
+                    $iva10 += $subtotalNeto;
+                } elseif ($line->tax_id == 3) {
+                    $iva27 += $subtotalNeto;
+                }
             }
 
-            $transaction->final_total = round($total, 2);
+            $totalFinal = round($totalFinal, 2);
+
+            $transaction->total_before_tax = $totalFinal;
+            $transaction->final_total = $totalFinal;
+
+            $transaction->iva21 = round($iva21, 2);
+            $transaction->iva10 = round($iva10, 2);
+            $transaction->iva27 = round($iva27, 2);
+
+            $transaction->tax_amount = 0;
+
             $transaction->exchange_rate = $cotizacion;
             $transaction->exchange_rate_updated_at = now();
+
             $transaction->save();
+
+            $this->transactionUtil->updatePaymentStatus(
+                $transaction->id,
+                $transaction->final_total
+            );
 
             DB::commit();
 
