@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
+use App\Transaction;
 
 class UpdateUsdProductPrices implements ShouldQueue
 {
@@ -327,6 +328,13 @@ class UpdateUsdProductPrices implements ShouldQueue
             return;
         }
 
+        /*
+ * Actualizar automáticamente las ventas debidas
+ * con la nueva cotización.
+ */
+        $this->updateDueSales();
+
+
         Log::info(
             'Precios USD actualizados correctamente.',
             [
@@ -433,5 +441,171 @@ class UpdateUsdProductPrices implements ShouldQueue
                 'finished_at' => now()->toDateTimeString(),
             ]
         );
+    }
+
+    protected function updateDueSales()
+    {
+        Transaction::query()
+            ->where('business_id', $this->businessId)
+            ->where('type', 'sell')
+            ->where('payment_status', '!=', 'paid')
+            ->where(function ($query) {
+                $query->whereNull('cae')
+                    ->orWhere('cae', '');
+            })
+            ->whereHas('sell_lines', function ($query) {
+                $query->whereNull('parent_sell_line_id')
+                    ->whereNotNull('unit_price_usd')
+                    ->where('unit_price_usd', '>', 0);
+            })
+            ->with([
+                'sell_lines' => function ($query) {
+                    $query->whereNull('parent_sell_line_id');
+                }
+            ])
+            ->orderBy('id')
+            ->chunkById(100, function ($transactions) {
+
+                foreach ($transactions as $transaction) {
+
+                    if (!$this->isCurrentExchangeRate()) {
+                        return false;
+                    }
+
+                    DB::transaction(function () use ($transaction) {
+
+                        $totalFinal = 0;
+                        $iva21 = 0;
+                        $iva10 = 0;
+                        $iva27 = 0;
+
+                        foreach ($transaction->sell_lines as $line) {
+
+                            /*
+                         * Si la línea no está dolarizada,
+                         * conserva el precio que ya tenía.
+                         */
+                            if (empty($line->unit_price_usd)) {
+
+                                $cantidad = (float) $line->quantity;
+                                $subtotalFinal =
+                                    (float) $line->unit_price_inc_tax *
+                                    $cantidad;
+
+                                $totalFinal += $subtotalFinal;
+
+                                continue;
+                            }
+
+                            $variation = Variation::find(
+                                $line->variation_id
+                            );
+
+                            if (!$variation) {
+                                continue;
+                            }
+
+                            $margen = (float) (
+                                $variation->profit_percent ?? 0
+                            );
+
+                            $precioVentaUsd =
+                                (float) $line->unit_price_usd *
+                                (1 + ($margen / 100));
+
+                            $nuevoPrecioNeto = round(
+                                $precioVentaUsd *
+                                    $this->exchangeRate,
+                                2
+                            );
+
+                            $coeficiente = 1;
+
+                            if ($line->tax_id == 1) {
+                                $coeficiente = 1.21;
+                            } elseif ($line->tax_id == 2) {
+                                $coeficiente = 1.105;
+                            } elseif ($line->tax_id == 3) {
+                                $coeficiente = 1.27;
+                            }
+
+                            $nuevoPrecioFinal = round(
+                                $nuevoPrecioNeto * $coeficiente,
+                                2
+                            );
+
+                            $itemTax = round(
+                                $nuevoPrecioFinal -
+                                    $nuevoPrecioNeto,
+                                2
+                            );
+
+                            $line->unit_price_before_discount =
+                                $nuevoPrecioFinal;
+
+                            $line->unit_price =
+                                $nuevoPrecioNeto;
+
+                            $line->unit_price_inc_tax =
+                                $nuevoPrecioFinal;
+
+                            $line->item_tax =
+                                $itemTax;
+
+                            $line->save();
+
+                            $cantidad =
+                                (float) $line->quantity;
+
+                            $subtotalFinal = round(
+                                $nuevoPrecioFinal *
+                                    $cantidad,
+                                2
+                            );
+
+                            $subtotalNeto = round(
+                                $nuevoPrecioNeto *
+                                    $cantidad,
+                                2
+                            );
+
+                            $totalFinal += $subtotalFinal;
+
+                            if ($line->tax_id == 1) {
+                                $iva21 += $subtotalNeto;
+                            } elseif ($line->tax_id == 2) {
+                                $iva10 += $subtotalNeto;
+                            } elseif ($line->tax_id == 3) {
+                                $iva27 += $subtotalNeto;
+                            }
+                        }
+
+                        $transaction->total_before_tax =
+                            round($totalFinal, 2);
+
+                        $transaction->final_total =
+                            round($totalFinal, 2);
+
+                        $transaction->iva21 =
+                            round($iva21, 2);
+
+                        $transaction->iva10 =
+                            round($iva10, 2);
+
+                        $transaction->iva27 =
+                            round($iva27, 2);
+
+                        $transaction->tax_amount = 0;
+
+                        $transaction->exchange_rate =
+                            $this->exchangeRate;
+
+                        $transaction
+                            ->exchange_rate_updated_at = now();
+
+                        $transaction->save();
+                    });
+                }
+            });
     }
 }
