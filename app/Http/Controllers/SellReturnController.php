@@ -820,7 +820,7 @@ class SellReturnController extends Controller
                     'CbteTipo'     => $CbteTipo,  // Tipo de comprobante (ver tipos disponibles) 
                     'Concepto'     => 1,  // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
                     'DocTipo'     => $doctipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
-                    'DocNro'     => intval($sell_return->contact->tax_number),  // Número de documento del comprador (0 consumidor final)
+                    'DocNro' => $docNro, // Número de documento del comprador (0 consumidor final)
                     'CbteDesde'     => $numComp,  // Número de comprobante o numero del primer comprobante en caso de ser mas de uno
                     'CbteHasta'     => $numComp,  // Número de comprobante o numero del último comprobante en caso de ser mas de uno
                     'CbteFch'         => intval($date2), // (Opcional) Fecha del comprobante (yyyymmdd) o fecha actual si es nulo
@@ -868,7 +868,7 @@ class SellReturnController extends Controller
                     'CbteTipo'     => $CbteTipo,  // Tipo de comprobante (ver tipos disponibles) 
                     'Concepto'     => 1,  // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
                     'DocTipo'     => $doctipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
-                    'DocNro'     => intval($sell_return->contact->tax_number),  // Número de documento del comprador (0 consumidor final)
+                    'DocNro' => $docNro, // Número de documento del comprador (0 consumidor final)
                     'CbteDesde'     => $numComp,  // Número de comprobante o numero del primer comprobante en caso de ser mas de uno
                     'CbteHasta'     => $numComp,  // Número de comprobante o numero del último comprobante en caso de ser mas de uno
                     'CbteFch'         => intval($date2), // (Opcional) Fecha del comprobante (yyyymmdd) o fecha actual si es nulo
@@ -913,7 +913,7 @@ class SellReturnController extends Controller
                 'CbteTipo'     => $CbteTipo,  // Tipo de comprobante (ver tipos disponibles) 
                 'Concepto'     => 1,  // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
                 'DocTipo'     => $doctipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
-                'DocNro'     => intval($sell_return->contact->tax_number),  // Número de documento del comprador (0 consumidor final)
+                'DocNro' => $docNro,  // Número de documento del comprador (0 consumidor final)
                 'CbteDesde'     => $numComp,  // Número de comprobante o numero del primer comprobante en caso de ser mas de uno
                 'CbteHasta'     => $numComp,  // Número de comprobante o numero del último comprobante en caso de ser mas de uno
                 'CbteFch'         => intval($date2), // (Opcional) Fecha del comprobante (yyyymmdd) o fecha actual si es nulo
