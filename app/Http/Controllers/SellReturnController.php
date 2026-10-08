@@ -562,9 +562,7 @@ class SellReturnController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function getProductRow()
-    {
-    }
+    public function getProductRow() {}
 
     /**
      * Returns the content for the receipt
@@ -744,7 +742,7 @@ class SellReturnController extends Controller
         $certPath = base_path($business_locations->url_cert);
         $keyPath = base_path($business_locations->url_key);
 
-        $options = [                   
+        $options = [
             'CUIT' => $cuit,
             'production' => True,
             'cert' => $certPath,
@@ -759,10 +757,24 @@ class SellReturnController extends Controller
         $date2 = $date->format('Ymd');
         $dateqr = $date->format('Y-m-d');
 
-        if ($sell_return->contact->id == 1) {
-            $doctipo = 99;
-        } else {
+        $doctipo = 99;
+        $docNro = 0;
+
+        if ((int) $sell_return->contact->id !== 1) {
+            $cuitCliente = preg_replace(
+                '/\D+/',
+                '',
+                (string) $sell_return->contact->tax_number
+            );
+
+            if (strlen($cuitCliente) !== 11) {
+                throw new \Exception(
+                    'El CUIT del cliente es inválido. Debe contener 11 números.'
+                );
+            }
+
             $doctipo = 80;
+            $docNro = (int) $cuitCliente;
         }
 
         if ($business_locations->tax_label_1 == 'MONOTRIBUTO') {
@@ -774,7 +786,7 @@ class SellReturnController extends Controller
                 'CbteTipo'     => $CbteTipo,  // Tipo de comprobante (ver tipos disponibles) 
                 'Concepto'     => 1,  // Concepto del Comprobante: (1)Productos, (2)Servicios, (3)Productos y Servicios
                 'DocTipo'     => $doctipo, // Tipo de documento del comprador (99 consumidor final, ver tipos disponibles)
-                'DocNro'     => intval($sell_return->contact->tax_number),  // Número de documento del comprador (0 consumidor final)
+                'DocNro' => $docNro,  // Número de documento del comprador (0 consumidor final)
                 'CbteDesde'     => $numComp,  // Número de comprobante o numero del primer comprobante en caso de ser mas de uno
                 'CbteHasta'     => $numComp,  // Número de comprobante o numero del último comprobante en caso de ser mas de uno
                 'CbteFch'         => intval($date2), // (Opcional) Fecha del comprobante (yyyymmdd) o fecha actual si es nulo
