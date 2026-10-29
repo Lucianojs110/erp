@@ -318,19 +318,19 @@
 
     .help-block {
         font-size: 10px;
-        color:red;
+        color: red;
     }
 
     .titulo {
         font-size: 30px;
-        color:#A6ACAF;
+        color: #A6ACAF;
     }
 
     footer {
-  text-align: center;
-  padding-top: 30px;
-  color: white;
-}
+        text-align: center;
+        padding-top: 30px;
+        color: white;
+    }
 </style>
 
 
@@ -350,27 +350,37 @@
             <h2 class="Titulo">{{ config('app.name', 'Sistema ERP') }}</h2>
         </div>
 
-       
-        
-        
+
+
+
         <!-- Login Form -->
-        <form class="form-horizontal" method="POST" action="{{ route('login') }}">
+        <!-- Login Form -->
+        <form class="form-horizontal" method="POST" action="{{ route('login') }}" autocomplete="off">
+
             {{ csrf_field() }}
-            <input type="text" id="login" class="fadeIn second" name="username" placeholder="Usuario">
+
+            <input type="text" id="login" class="fadeIn second" name="username" placeholder="Usuario"
+                autocomplete="off" required>
+
             @if ($errors->has('username'))
-            <br>
-            <span class="help-block">
-                <strong>Ingrese un email valido</strong>
-            </span>
+                <br>
+                <span class="help-block">
+                    <strong>Ingrese un usuario válido</strong>
+                </span>
             @endif
-            <input type="password" id="password" class="fadeIn third" name="password" placeholder="Password">
+
+            <input type="password" id="password" class="fadeIn third" name="password" placeholder="Contraseña"
+                autocomplete="off" required>
+
             @if ($errors->has('password'))
-            <br>
-            <span class="help-block">
-                <strong>Ingrese un password valido</strong>
-            </span>
+                <br>
+                <span class="help-block">
+                    <strong>Ingrese una contraseña válida</strong>
+                </span>
             @endif
+
             <br>
+
             <input type="submit" class="fadeIn fourth" value="Ingresar">
         </form>
 
@@ -379,8 +389,7 @@
 
     </div>
     <footer>
-  
- 
-</footer>
-</div>
 
+
+    </footer>
+</div>
