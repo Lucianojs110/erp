@@ -124,6 +124,17 @@ class ProductController extends Controller
             }
 
             return Datatables::of($products)
+                ->filter(function ($query) {
+                    $search = request()->input('search.value', '');
+
+                    if (trim($search) !== '') {
+                        $words = preg_split('/\s+/', trim($search));
+
+                        foreach ($words as $word) {
+                            $query->where('products.name', 'LIKE', '%' . $word . '%');
+                        }
+                    }
+                })
                 ->addColumn(
                     'action',
                     function ($row) use ($selling_price_group_count) {
