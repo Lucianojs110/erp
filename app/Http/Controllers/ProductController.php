@@ -2357,78 +2357,172 @@ class ProductController extends Controller
 
     public function selectionUpdate(Request $request)
     {
+
+
+
         if (!auth()->user()->can('product.update')) {
             abort(403, 'Unauthorized action.');
         }
 
-        $parsedRequest = $request->all();
         $business_id = $request->session()->get('user.business_id');
 
-        try {
-            DB::beginTransaction();
-            $ids = $parsedRequest['products-ids'];
-            $products = Product::whereIn('products.id', json_decode($ids))
-                ->join('variations', 'products.id', '=', 'variations.product_id')
-                ->where('products.business_id', $business_id)
-                ->select(
-                    'variations.id as variation_id',
-                    'products.id as product_id',
-                    'variations.default_sell_price'
-                )
-                ->get();
+        $request->validate([
+            'products-ids' => 'required|json',
+            'typeOfUpdate' => 'required|in:percentage,fixed',
+            'increment-percent' => 'required_if:typeOfUpdate,percentage|nullable|numeric|gt:-100',
+            'fixed-value' => 'required_if:typeOfUpdate,fixed|nullable|numeric|min:0',
+        ]);
 
-            foreach ($products as $product) {
+        $ids = json_decode($request->input('products-ids'), true);
 
-                $variation_details = Variation::with('product')
-                    ->where('id', $product->variation_id)
-                    ->first();
-                Log::info($variation_details->product->tax);
-
-                if ($parsedRequest['typeOfUpdate'] == 'percentage') {
-
-                    if ($variation_details->product->tax == 1) {
-                        $variation_details->sell_price_inc_tax *= ($parsedRequest['increment-percent'] / 100) + 1;
-                        $variation_details->default_sell_price =  $variation_details->sell_price_inc_tax / 1.21;
-                    } else if ($variation_details->product->tax == 2) {
-                        $variation_details->sell_price_inc_tax *= ($parsedRequest['increment-percent'] / 100) + 1;
-                        $variation_details->default_sell_price =  $variation_details->sell_price_inc_tax / 1.105;
-                    } else {
-                        $variation_details->sell_price_inc_tax *= ($parsedRequest['increment-percent'] / 100) + 1;
-                    }
-                }
-
-                if ($parsedRequest['typeOfUpdate'] == 'fixed') {
-
-                    if ($variation_details->product->tax == 1) {
-                        $variation_details->sell_price_inc_tax += $parsedRequest['fixed-value'];
-                        $variation_details->default_sell_price =  $variation_details->sell_price_inc_tax / 1.21;
-                    } else if ($variation_details->product->tax == 2) {
-                        $variation_details->sell_price_inc_tax += $parsedRequest['fixed-value'];
-                        $variation_details->default_sell_price =  $variation_details->sell_price_inc_tax / 1.105;
-                    } else {
-                        $variation_details->sell_price_inc_tax += $parsedRequest['fixed-value'];
-                        $variation_details->default_sell_price += $parsedRequest['fixed-value'];
-                    }
-                }
-
-                //$variation_details->default_sell_price = $variation_details->default_sell_price;
-                $variation_details->save();
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
-
-            $output = array(
+        if (!is_array($ids) || empty($ids)) {
+            return redirect('products')->with('status', [
                 'success' => 0,
-                'msg' => $e->getMessage() . ' en la linea ' . $e->getLine(),
-            );
+                'msg' => 'No se seleccionaron productos.',
+            ]);
         }
 
-        $output = array(
-            'success' => 1,
-            'msg' => 'Precios actualizados con éxito'
-        );
+        $type = $request->input('typeOfUpdate');
+
+        $increment = $type === 'percentage'
+            ? (float) $request->input('increment-percent')
+            : (float) $request->input('fixed-value');
+
+        try {
+            DB::transaction(function () use ($business_id, $ids, $type, $increment) {
+
+                $variations = Variation::with(['product.product_tax'])
+                    ->whereHas('product', function ($query) use ($business_id, $ids) {
+                        $query->where('business_id', $business_id)
+                            ->whereIn('id', $ids);
+                    })
+                    ->whereNull('deleted_at')
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($variations as $variation) {
+
+                    $product = $variation->product;
+
+                    $tax_rate = (float) (
+                        optional($product->product_tax)->amount ?? 0
+                    );
+
+                    $tax_multiplier = 1 + ($tax_rate / 100);
+
+                    /*
+                 * PRODUCTOS CON COSTO EN DOLARES
+                 */
+                    if (
+                        $variation->default_purchase_price_usd !== null &&
+                        (float) $variation->default_purchase_price_usd > 0
+                    ) {
+
+                        $old_usd_cost = (float) $variation->default_purchase_price_usd;
+                        $old_peso_cost = (float) $variation->default_purchase_price;
+
+                        /*
+                     * Calculamos la cotizacion implícita actual.
+                     * Así conservamos la misma cotizacion al actualizar.
+                     */
+                        if ($old_peso_cost <= 0) {
+                            throw new \RuntimeException(
+                                'El producto ' . $product->name .
+                                    ' tiene costo USD pero no tiene costo en pesos válido.'
+                            );
+                        }
+
+                        $exchange_rate = $old_peso_cost / $old_usd_cost;
+
+                        if ($type === 'percentage') {
+                            $new_usd_cost = $old_usd_cost * (1 + $increment / 100);
+                        } else {
+                            /*
+                         * Para productos USD, el incremento fijo
+                         * se interpreta en dolares.
+                         */
+                            $new_usd_cost = $old_usd_cost + $increment;
+                        }
+
+                        $new_usd_cost = round($new_usd_cost, 4);
+
+                        $new_peso_cost = round(
+                            $new_usd_cost * $exchange_rate,
+                            4
+                        );
+
+                        $profit_percent = (float) $variation->profit_percent;
+
+                        $new_sell_price = round(
+                            $new_peso_cost * (1 + $profit_percent / 100),
+                            4
+                        );
+
+                        $variation->default_purchase_price_usd = $new_usd_cost;
+                        $variation->default_purchase_price = $new_peso_cost;
+                        $variation->dpp_inc_tax = round(
+                            $new_peso_cost * $tax_multiplier,
+                            4
+                        );
+
+                        $variation->default_sell_price = $new_sell_price;
+                        $variation->sell_price_inc_tax = round(
+                            $new_sell_price * $tax_multiplier,
+                            4
+                        );
+                    } else {
+
+                        /*
+                     * PRODUCTOS TRADICIONALES EN PESOS
+                     * Conservamos el comportamiento de actualizar
+                     * directamente el precio de venta.
+                     */
+
+                        $old_final_price = (float) $variation->sell_price_inc_tax;
+
+                        if ($type === 'percentage') {
+                            $new_final_price = $old_final_price *
+                                (1 + $increment / 100);
+                        } else {
+                            $new_final_price = $old_final_price + $increment;
+                        }
+
+                        $variation->sell_price_inc_tax = round(
+                            $new_final_price,
+                            4
+                        );
+
+                        $variation->default_sell_price = round(
+                            $new_final_price / $tax_multiplier,
+                            4
+                        );
+
+                        /*
+                     * No modificamos el costo de compra en pesos.
+                     */
+                    }
+
+                    $variation->save();
+                }
+            });
+
+            $output = [
+                'success' => 1,
+                'msg' => 'Precios actualizados con éxito.',
+            ];
+        } catch (\Exception $e) {
+
+            Log::emergency(
+                'Error en selectionUpdate. File:' . $e->getFile() .
+                    ' Line:' . $e->getLine() .
+                    ' Message:' . $e->getMessage()
+            );
+
+            $output = [
+                'success' => 0,
+                'msg' => $e->getMessage(),
+            ];
+        }
 
         return redirect('products')->with('status', $output);
     }
@@ -2450,66 +2544,217 @@ class ProductController extends Controller
     /**
      * Function to update sell price massively
      */
+
     public function massiveUpdatePercent(Request $request)
     {
         if (!auth()->user()->can('product.update')) {
             abort(403, 'Unauthorized action.');
         }
 
+        $request->validate([
+            'increment-percent' => 'required|numeric|gt:-100',
+            'brand_id' => 'nullable|integer',
+            'category_id' => 'nullable|integer',
+            'sub_category_id' => 'nullable|integer',
+        ]);
+
+        $business_id = $request->session()->get('user.business_id');
+
+        $filters = $request->only([
+            'brand_id',
+            'category_id',
+            'sub_category_id',
+        ]);
+
+        $increment = (float) $request->input('increment-percent');
+        $multiplier = 1 + ($increment / 100);
+
         try {
-            $business_id = $request->session()->get('user.business_id');
-            $product_filters = $request->only(['brand_id', 'category_id', 'sub_category_id']);
-            $increment = $request->only('increment-percent');
-            $increment = (float)$increment['increment-percent'];
 
-            DB::beginTransaction();
+            $updated_usd = 0;
+            $updated_pesos = 0;
 
-            $products = Variation::join('products', 'products.id',  '=', 'variations.product_id')
-                ->where('products.business_id', $business_id)
-                ->when($product_filters['brand_id'] != null, function ($query) use ($product_filters) {
-                    return $query->where('products.brand_id', $product_filters['brand_id']);
-                })
-                ->when($product_filters['category_id'] != null, function ($query) use ($product_filters) {
-                    return $query->where('products.category_id', $product_filters['category_id']);
-                })
-                ->when($product_filters['sub_category_id'] != null, function ($query) use ($product_filters) {
-                    return $query->where('products.sub_category_id', $product_filters['sub_category_id']);
-                });
+            DB::transaction(function () use (
+                $business_id,
+                $filters,
+                $multiplier,
+                &$updated_usd,
+                &$updated_pesos
+            ) {
 
+                $variations = Variation::with(['product.product_tax'])
+                    ->whereHas('product', function ($query) use (
+                        $business_id,
+                        $filters
+                    ) {
+                        $query->where('business_id', $business_id);
 
-            $products = $products->select(
-                'variations.id as variation_id',
-                'products.id as product_id',
-                'variations.default_sell_price'
-            )
-                ->get();
+                        if (!empty($filters['brand_id'])) {
+                            $query->where(
+                                'brand_id',
+                                $filters['brand_id']
+                            );
+                        }
 
-            $percentage = ($increment / 100) + 1;
-            foreach ($products as $product) {
+                        if (!empty($filters['category_id'])) {
+                            $query->where(
+                                'category_id',
+                                $filters['category_id']
+                            );
+                        }
 
-                $variation_details = Variation::where('id', $product->variation_id)
-                    ->first();
+                        if (!empty($filters['sub_category_id'])) {
+                            $query->where(
+                                'sub_category_id',
+                                $filters['sub_category_id']
+                            );
+                        }
+                    })
+                    ->whereNull('deleted_at')
+                    ->lockForUpdate()
+                    ->get();
 
-                $variation_details->default_sell_price *= $percentage;
-                $variation_details->default_sell_price = $variation_details->default_sell_price;
-                $variation_details->sell_price_inc_tax *= $percentage;
-                $variation_details->sell_price_inc_tax = $variation_details->sell_price_inc_tax;
-                $variation_details->save();
-            }
+                foreach ($variations as $variation) {
 
-            DB::commit();
-            $output = array(
+                    $product = $variation->product;
+
+                    $tax_rate = (float) (
+                        optional($product->product_tax)->amount ?? 0
+                    );
+
+                    $tax_multiplier = 1 + ($tax_rate / 100);
+
+                    /*
+                 * PRODUCTOS CON COSTO EN DOLARES
+                 */
+                    if (
+                        $variation->default_purchase_price_usd !== null &&
+                        (float) $variation->default_purchase_price_usd > 0
+                    ) {
+
+                        $old_usd_cost = (float)
+                        $variation->default_purchase_price_usd;
+
+                        $old_peso_cost = (float)
+                        $variation->default_purchase_price;
+
+                        /*
+                     * Conservamos la cotizacion utilizada
+                     * actualmente por el producto.
+                     */
+                        if ($old_peso_cost <= 0) {
+                            throw new \RuntimeException(
+                                'El producto ' . $product->name .
+                                    ' tiene costo USD pero no tiene ' .
+                                    'un costo en pesos valido.'
+                            );
+                        }
+
+                        $exchange_rate = $old_peso_cost / $old_usd_cost;
+
+                        /*
+                     * Aumentamos el costo en dolares.
+                     */
+                        $new_usd_cost = round(
+                            $old_usd_cost * $multiplier,
+                            4
+                        );
+
+                        /*
+                     * Recalculamos el costo en pesos.
+                     */
+                        $new_peso_cost = round(
+                            $new_usd_cost * $exchange_rate,
+                            4
+                        );
+
+                        /*
+                     * Conservamos el porcentaje de ganancia.
+                     */
+                        $profit_percent = (float)
+                        $variation->profit_percent;
+
+                        $new_sell_price = round(
+                            $new_peso_cost *
+                                (1 + $profit_percent / 100),
+                            4
+                        );
+
+                        /*
+                     * Guardamos los nuevos valores.
+                     */
+                        $variation->default_purchase_price_usd =
+                            $new_usd_cost;
+
+                        $variation->default_purchase_price =
+                            $new_peso_cost;
+
+                        $variation->dpp_inc_tax = round(
+                            $new_peso_cost * $tax_multiplier,
+                            4
+                        );
+
+                        $variation->default_sell_price =
+                            $new_sell_price;
+
+                        $variation->sell_price_inc_tax = round(
+                            $new_sell_price * $tax_multiplier,
+                            4
+                        );
+
+                        $updated_usd++;
+                    } else {
+
+                        /*
+                     * PRODUCTOS TRADICIONALES EN PESOS
+                     *
+                     * Aumentamos solamente el precio
+                     * de venta, como hacia el metodo original.
+                     */
+
+                        $variation->default_sell_price = round(
+                            (float) $variation->default_sell_price *
+                                $multiplier,
+                            4
+                        );
+
+                        $variation->sell_price_inc_tax = round(
+                            (float) $variation->sell_price_inc_tax *
+                                $multiplier,
+                            4
+                        );
+
+                        /*
+                     * No modificamos los costos de compra.
+                     */
+
+                        $updated_pesos++;
+                    }
+
+                    $variation->save();
+                }
+            });
+
+            $output = [
                 'success' => 1,
-                'msg' => 'Precios actualizados con éxito'
-            );
+                'msg' => 'Precios actualizados correctamente. ' .
+                    'Productos USD: ' . $updated_usd .
+                    ' | Productos en pesos: ' . $updated_pesos,
+            ];
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
 
-            $output = array(
-                'success' => 0,
-                'msg' => $e->getMessage() . ' en la linea ' . $e->getLine(),
+            Log::emergency(
+                'Error massiveUpdatePercent. File: ' .
+                    $e->getFile() .
+                    ' Line: ' . $e->getLine() .
+                    ' Message: ' . $e->getMessage()
             );
+
+            $output = [
+                'success' => 0,
+                'msg' => $e->getMessage() .
+                    ' en la linea ' . $e->getLine(),
+            ];
         }
 
         return redirect('products')->with('status', $output);
